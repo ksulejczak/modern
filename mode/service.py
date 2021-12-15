@@ -108,6 +108,7 @@ class Service(ServiceWithCallbacks):
         if self._stopped.is_set():
             return
         self._state = ServiceState.STOPPING
+        await self.on_stop()
         self._should_stop = True
         running_tasks = [task for task in self._tasks if not task.done()]
         if running_tasks:
@@ -125,6 +126,7 @@ class Service(ServiceWithCallbacks):
                 timeout=None,
             )
         self._stopped.set()
+        await self.on_shutdown()
 
     def service_reset(self) -> None:
         raise NotImplementedError(self)

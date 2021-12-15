@@ -38,10 +38,10 @@ class ServiceStub(Service):
         self.callback_counts.started += 1
 
     async def on_stop(self) -> None:
-        raise NotImplementedError(self)
+        self.callback_counts.stop += 1
 
     async def on_shutdown(self) -> None:
-        raise NotImplementedError(self)
+        self.callback_counts.shutdown += 1
 
     async def on_restart(self) -> None:
         raise NotImplementedError(self)
@@ -100,16 +100,22 @@ async def test_on_started() -> None:
 
 async def test_on_stop() -> None:
     service = ServiceStub()
+    await service.start()
+    assert service.callback_counts.stop == 0
 
-    with pytest.raises(NotImplementedError):
-        await service.on_stop()
+    await service.stop()
+
+    assert service.callback_counts.stop == 1
 
 
 async def test_on_shutdown() -> None:
     service = ServiceStub()
+    await service.start()
+    assert service.callback_counts.shutdown == 0
 
-    with pytest.raises(NotImplementedError):
-        await service.on_shutdown()
+    await service.stop()
+
+    assert service.callback_counts.shutdown == 1
 
 
 async def test_on_restart() -> None:
