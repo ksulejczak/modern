@@ -75,8 +75,8 @@ async def test_from_awaitable() -> None:
     service = Service.from_awaitable(call())
 
     assert isinstance(service, Service)
-    await service.start()
-    await service.stop()
+    async with service:
+        pass
     assert calls == [1]
 
 
@@ -84,28 +84,26 @@ async def test_on_first_start() -> None:
     service = ServiceStub()
     assert service.callback_counts.first_start == 0
 
-    await service.start()
+    async with service:
+        pass
 
     assert service.callback_counts.first_start == 1
-    await service.stop()
 
 
 async def test_on_start() -> None:
     service = ServiceStub()
     assert service.callback_counts.start == 0
 
-    await service.start()
-
-    assert service.callback_counts.start == 1
+    async with service:
+        assert service.callback_counts.start == 1
 
 
 async def test_on_started() -> None:
     service = ServiceStub()
     assert service.callback_counts.started == 0
 
-    await service.start()
-
-    assert service.callback_counts.started == 1
+    async with service:
+        assert service.callback_counts.started == 1
 
 
 async def test_on_stop() -> None:
@@ -143,10 +141,8 @@ async def test_add_dependency_dependent_service_is_run_on_start() -> None:
     assert added_service is dependency
     assert dependency.callback_counts.started == 0
 
-    await service.start()
-
-    assert dependency.callback_counts.started == 1
-    await service.stop()
+    async with service:
+        assert dependency.callback_counts.started == 1
 
 
 async def test_add_dependency_dependent_service_is_stopped_on_stop() -> None:
@@ -154,10 +150,10 @@ async def test_add_dependency_dependent_service_is_stopped_on_stop() -> None:
     dependency = ServiceStub()
     added_service = service.add_dependency(dependency)
     assert added_service is dependency
-    await service.start()
-    assert dependency.callback_counts.stop == 0
 
-    await service.stop()
+    assert dependency.callback_counts.stop == 0
+    async with service:
+        pass
 
     assert dependency.callback_counts.stop == 1
 
@@ -171,26 +167,25 @@ async def test_add_runtime_dependency_attach_to_not_started_service() -> None:
     assert added_service is dependency
     assert dependency.callback_counts.start == 0
 
-    await service.start()
+    async with service:
+        assert dependency.callback_counts.start == 1
 
-    assert dependency.callback_counts.start == 1
-
-    await service.stop()
     assert dependency.callback_counts.stop == 1
 
 
 async def test_add_runtime_dependency_attach_to_not_running_service() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
-    await service.start()
-    assert dependency.callback_counts.start == 0
 
-    added_service = await service.add_runtime_dependency(dependency)
+    async with service:
+        assert dependency.callback_counts.start == 0
 
-    assert added_service is dependency
-    assert dependency.callback_counts.start == 1
+        added_service = await service.add_runtime_dependency(dependency)
 
-    await service.stop()
+        assert added_service is dependency
+        assert dependency.callback_counts.start == 1
+        assert dependency.callback_counts.stop == 0
+
     assert dependency.callback_counts.stop == 1
 
 
@@ -219,8 +214,8 @@ async def test_add_async_context() -> None:
 async def test_start() -> None:
     service = ServiceStub()
 
-    await service.start()
-    await asyncio.sleep(0.02)
+    async with service:
+        await asyncio.sleep(0.02)
 
     assert service.task1_run == 1
     assert service.timer1_run > 0
@@ -282,10 +277,10 @@ async def test_stop_on_already_stopped_service() -> None:
 
 async def test_stop_on_long_running_service_cancels_tasks() -> None:
     long_runing_service = Service.from_awaitable(asyncio.sleep(10))
-    await long_runing_service.start()
 
     time0 = monotonic()
-    await long_runing_service.stop()
+    async with long_runing_service:
+        await long_runing_service.stop()
     time1 = monotonic()
 
     assert time1 - time0 < 1
@@ -341,3 +336,15 @@ def test_set_shutdown() -> None:
 
     with pytest.raises(NotImplementedError):
         service.set_shutdown()
+
+
+async def test_service_as_context_manager() -> None:
+    service = ServiceStub()
+
+    async with service as context_service:
+        assert context_service is service
+
+    assert service.callback_counts.first_start == 1
+    assert service.callback_counts.start == 1
+    assert service.callback_counts.stop == 1
+    assert service.callback_counts.start == 1

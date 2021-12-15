@@ -4,6 +4,7 @@ import asyncio
 import enum
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import wraps
+from types import TracebackType
 from typing import Any, Awaitable, Callable, Type
 
 from .types import ServiceT
@@ -159,6 +160,18 @@ class Service(ServiceWithCallbacks):
 
     def set_shutdown(self) -> None:
         raise NotImplementedError(self)
+
+    async def __aenter__(self) -> Service:
+        await self.start()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Type[BaseException] = None,
+        exc_val: BaseException = None,
+        exc_tb: TracebackType = None,
+    ) -> None:
+        await self.stop()
 
     @classmethod
     def task(cls, fun: _Task) -> _Task:
