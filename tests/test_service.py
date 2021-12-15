@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from time import monotonic
 from typing import AsyncGenerator, Generator
 
@@ -10,20 +11,31 @@ from mode.service import Service, ServiceAlreadyRunError, ServiceNotRunError
 pytestmark = [pytest.mark.asyncio]
 
 
+@dataclass
+class CallbackCounts:
+    first_start: int = 0
+    start: int = 0
+    started: int = 0
+    stop: int = 0
+    shutdown: int = 0
+    restart: int = 0
+
+
 class ServiceStub(Service):
     def __init__(self) -> None:
         super().__init__()
         self.task1_run = 0
         self.timer1_run = 0
+        self.callback_counts = CallbackCounts()
 
     async def on_first_start(self) -> None:
         raise NotImplementedError(self)
 
     async def on_start(self) -> None:
-        raise NotImplementedError(self)
+        self.callback_counts.start += 1
 
     async def on_started(self) -> None:
-        raise NotImplementedError(self)
+        self.callback_counts.started += 1
 
     async def on_stop(self) -> None:
         raise NotImplementedError(self)
@@ -70,16 +82,20 @@ async def test_from_awaitable() -> None:
 
 async def test_on_start() -> None:
     service = ServiceStub()
+    assert service.callback_counts.start == 0
 
-    with pytest.raises(NotImplementedError):
-        await service.on_start()
+    await service.start()
+
+    assert service.callback_counts.start == 1
 
 
 async def test_on_started() -> None:
     service = ServiceStub()
+    assert service.callback_counts.started == 0
 
-    with pytest.raises(NotImplementedError):
-        await service.on_started()
+    await service.start()
+
+    assert service.callback_counts.started == 1
 
 
 async def test_on_stop() -> None:

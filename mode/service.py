@@ -87,10 +87,12 @@ class Service(ServiceWithCallbacks):
     async def start(self) -> None:
         if self._state is not ServiceState.INIT:
             raise ServiceAlreadyRunError(self._state)
+        await self.on_start()
         for task in self._collect_tasks():
             async_task = asyncio.create_task(task(self))
             self._tasks.append(async_task)
         self._state = ServiceState.RUNNING
+        await self.on_started()
 
     async def maybe_start(self) -> bool:
         raise NotImplementedError(self)
