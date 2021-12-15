@@ -73,7 +73,10 @@ class Service(ServiceWithCallbacks):
         return service
 
     async def add_runtime_dependency(self, service: ServiceT) -> ServiceT:
-        raise NotImplementedError(self)
+        self.add_dependency(service)
+        if self._state is ServiceState.RUNNING:
+            await service.maybe_start()
+        return service
 
     async def remove_dependency(self, service: ServiceT) -> ServiceT:
         raise NotImplementedError(self)

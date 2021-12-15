@@ -162,12 +162,36 @@ async def test_add_dependency_dependent_service_is_stopped_on_stop() -> None:
     assert dependency.callback_counts.stop == 1
 
 
-async def test_add_runtime_dependency() -> None:
+async def test_add_runtime_dependency_attach_to_not_started_service() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
 
-    with pytest.raises(NotImplementedError):
-        await service.add_runtime_dependency(dependency)
+    added_service = await service.add_runtime_dependency(dependency)
+
+    assert added_service is dependency
+    assert dependency.callback_counts.start == 0
+
+    await service.start()
+
+    assert dependency.callback_counts.start == 1
+
+    await service.stop()
+    assert dependency.callback_counts.stop == 1
+
+
+async def test_add_runtime_dependency_attach_to_not_running_service() -> None:
+    service = ServiceStub()
+    dependency = ServiceStub()
+    await service.start()
+    assert dependency.callback_counts.start == 0
+
+    added_service = await service.add_runtime_dependency(dependency)
+
+    assert added_service is dependency
+    assert dependency.callback_counts.start == 1
+
+    await service.stop()
+    assert dependency.callback_counts.stop == 1
 
 
 async def test_remove_dependency() -> None:
