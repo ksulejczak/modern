@@ -175,11 +175,23 @@ async def test_start_on_already_started_service() -> None:
         await service.start()
 
 
-async def test_maybe_start() -> None:
+async def test_maybe_start_on_not_running_service() -> None:
     service = ServiceStub()
 
-    with pytest.raises(NotImplementedError):
-        await service.maybe_start()
+    started = await service.maybe_start()
+
+    assert started is True
+    await service.stop()
+
+
+async def test_maybe_start_on_running_service() -> None:
+    service = ServiceStub()
+    await service.start()
+
+    started = await service.maybe_start()
+
+    assert started is False
+    await service.stop()
 
 
 async def test_crash() -> None:

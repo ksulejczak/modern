@@ -95,7 +95,11 @@ class Service(ServiceWithCallbacks):
         await self.on_started()
 
     async def maybe_start(self) -> bool:
-        raise NotImplementedError(self)
+        if self._state is ServiceState.INIT:
+            await self.start()
+            return True
+        else:
+            return False
 
     async def crash(self, reason: BaseException) -> None:
         raise NotImplementedError(self)
