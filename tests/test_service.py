@@ -29,7 +29,7 @@ class ServiceStub(Service):
         self.callback_counts = CallbackCounts()
 
     async def on_first_start(self) -> None:
-        raise NotImplementedError(self)
+        self.callback_counts.first_start += 1
 
     async def on_start(self) -> None:
         self.callback_counts.start += 1
@@ -78,6 +78,16 @@ async def test_from_awaitable() -> None:
     await service.start()
     await service.stop()
     assert calls == [1]
+
+
+async def test_on_first_start() -> None:
+    service = ServiceStub()
+    assert service.callback_counts.first_start == 0
+
+    await service.start()
+
+    assert service.callback_counts.first_start == 1
+    await service.stop()
 
 
 async def test_on_start() -> None:

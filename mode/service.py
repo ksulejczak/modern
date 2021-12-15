@@ -91,6 +91,8 @@ class Service(ServiceWithCallbacks):
         if self._state is not ServiceState.INIT:
             raise ServiceAlreadyRunError(self._state)
         self._state = ServiceState.STARTING
+        if self._restart_count == 0:
+            await self.on_first_start()
         await self.on_start()
         if self._children:
             await asyncio.gather(
