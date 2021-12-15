@@ -11,6 +11,7 @@ from .types import ServiceT
 
 class ServiceState(enum.Enum):
     INIT = "init"
+    STARTING = "starting"
     RUNNING = "running"
     STOPPING = "stopping"
     CRASHED = "crashed"
@@ -64,10 +65,12 @@ class Service(ServiceWithCallbacks):
         self._restart_count = 0
         self._should_stop = False
         self._tasks: list[asyncio.Task] = []
+        self._children: list[ServiceT] = []
         self._stopped = asyncio.Event()
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
-        raise NotImplementedError(self)
+        self._children.append(service)
+        return service
 
     async def add_runtime_dependency(self, service: ServiceT) -> ServiceT:
         raise NotImplementedError(self)
@@ -87,7 +90,12 @@ class Service(ServiceWithCallbacks):
     async def start(self) -> None:
         if self._state is not ServiceState.INIT:
             raise ServiceAlreadyRunError(self._state)
+        self._state = ServiceState.STARTING
         await self.on_start()
+        if self._children:
+            await asyncio.gather(
+                *(child.maybe_start() for child in self._children)
+            )
         for task in self._collect_tasks():
             async_task = asyncio.create_task(task(self))
             self._tasks.append(async_task)
@@ -109,6 +117,8 @@ class Service(ServiceWithCallbacks):
             return
         self._state = ServiceState.STOPPING
         await self.on_stop()
+        if self._children:
+            await asyncio.gather(*(child.stop() for child in self._children))
         self._should_stop = True
         running_tasks = [task for task in self._tasks if not task.done()]
         if running_tasks:
@@ -126,6 +136,7 @@ class Service(ServiceWithCallbacks):
                 timeout=None,
             )
         self._stopped.set()
+        self._state = ServiceState.SHUTDOWN
         await self.on_shutdown()
 
     def service_reset(self) -> None:
