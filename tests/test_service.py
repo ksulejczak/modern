@@ -189,11 +189,25 @@ async def test_add_runtime_dependency_attach_to_not_running_service() -> None:
     assert dependency.callback_counts.stop == 1
 
 
-async def test_remove_dependency() -> None:
+async def test_remove_dependency_existing_dependecy_is_stopped() -> None:
+    service = ServiceStub()
+    dependency = ServiceStub()
+    service.add_dependency(dependency)
+
+    async with service:
+        assert dependency.callback_counts.stop == 0
+
+        removed_dependency = await service.remove_dependency(dependency)
+
+        assert removed_dependency is dependency
+        assert dependency.callback_counts.stop == 1
+
+
+async def test_remove_dependency_invalid_dependency() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ValueError):
         await service.remove_dependency(dependency)
 
 

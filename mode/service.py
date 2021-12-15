@@ -80,7 +80,9 @@ class Service(ServiceWithCallbacks):
         return service
 
     async def remove_dependency(self, service: ServiceT) -> ServiceT:
-        raise NotImplementedError(self)
+        self._children.remove(service)
+        await service.stop()
+        return service
 
     def add_context(self, context: AbstractContextManager) -> Any:
         raise NotImplementedError(self)
