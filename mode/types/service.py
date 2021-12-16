@@ -26,7 +26,7 @@ class ServiceT(abc.ABC):
     async def add_async_context(
         self,
         context: AbstractAsyncContextManager,
-    ) -> Any:
+    ) -> None:
         ...  # pragma: no cover
 
     @abc.abstractmethod

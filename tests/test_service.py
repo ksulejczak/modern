@@ -220,9 +220,21 @@ def test_add_context() -> None:
 
 async def test_add_async_context() -> None:
     service = ServiceStub()
+    what: list[str] = []
 
-    with pytest.raises(NotImplementedError):
-        await service.add_async_context(stub_asynccontextmanager())
+    @asynccontextmanager
+    async def cm():
+        what.append("started")
+        yield None
+        what.append("stopped")
+
+    await service.add_async_context(cm())
+    assert what == []
+
+    async with service:
+        assert what == ["started"]
+
+    assert what == ["started", "stopped"]
 
 
 async def test_start() -> None:

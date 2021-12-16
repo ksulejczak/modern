@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import enum
-from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    AsyncExitStack,
+)
 from functools import wraps
 from types import TracebackType
-from typing import Any, Awaitable, Callable, Type
+from typing import Any, Awaitable, Callable, Optional, Type
 
 from .types import ServiceT
 
@@ -68,6 +72,8 @@ class Service(ServiceWithCallbacks):
         self._tasks: list[asyncio.Task] = []
         self._children: list[ServiceT] = []
         self._stopped = asyncio.Event()
+        self._async_exit_stack: Optional[AsyncExitStack] = None
+        self._async_context_managers: list[AbstractAsyncContextManager] = []
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
         self._children.append(service)
@@ -90,8 +96,8 @@ class Service(ServiceWithCallbacks):
     async def add_async_context(
         self,
         context: AbstractAsyncContextManager,
-    ) -> Any:
-        raise NotImplementedError(self)
+    ) -> None:
+        self._async_context_managers.append(context)
 
     async def start(self) -> None:
         if self._state is not ServiceState.INIT:
@@ -100,13 +106,25 @@ class Service(ServiceWithCallbacks):
         if self._restart_count == 0:
             await self.on_first_start()
         await self.on_start()
+
         if self._children:
             await asyncio.gather(
                 *(child.maybe_start() for child in self._children)
             )
+
+        if self._async_context_managers:
+            async_exit_stack = self._async_exit_stack = AsyncExitStack()
+            for async_context_manager in self._async_context_managers:
+                await async_exit_stack.enter_async_context(
+                    async_context_manager
+                )
+            await async_exit_stack.__aenter__()
+            self._async_context_managers.clear()
+
         for task in self._collect_tasks():
             async_task = asyncio.create_task(task(self))
             self._tasks.append(async_task)
+
         self._state = ServiceState.RUNNING
         await self.on_started()
 
@@ -125,9 +143,14 @@ class Service(ServiceWithCallbacks):
             return
         self._state = ServiceState.STOPPING
         await self.on_stop()
+        self._should_stop = True
+
         if self._children:
             await asyncio.gather(*(child.stop() for child in self._children))
-        self._should_stop = True
+
+        if self._async_exit_stack:
+            await self._async_exit_stack.__aexit__(None, None, None)
+
         running_tasks = [task for task in self._tasks if not task.done()]
         if running_tasks:
             await asyncio.wait(
@@ -143,6 +166,7 @@ class Service(ServiceWithCallbacks):
                 return_when=asyncio.ALL_COMPLETED,
                 timeout=None,
             )
+
         self._stopped.set()
         self._state = ServiceState.SHUTDOWN
         await self.on_shutdown()
