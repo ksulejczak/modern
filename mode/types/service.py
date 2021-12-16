@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
-from typing import Any
 
 
 class ServiceT(abc.ABC):
@@ -19,7 +18,7 @@ class ServiceT(abc.ABC):
         ...  # pragma: no cover
 
     @abc.abstractmethod
-    def add_context(self, context: AbstractContextManager) -> Any:
+    def add_context(self, context: AbstractContextManager) -> None:
         ...  # pragma: no cover
 
     @abc.abstractmethod

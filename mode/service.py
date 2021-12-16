@@ -6,6 +6,7 @@ from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
     AsyncExitStack,
+    ExitStack,
 )
 from functools import wraps
 from types import TracebackType
@@ -74,6 +75,8 @@ class Service(ServiceWithCallbacks):
         self._stopped = asyncio.Event()
         self._async_exit_stack: Optional[AsyncExitStack] = None
         self._async_context_managers: list[AbstractAsyncContextManager] = []
+        self._exit_stack: Optional[ExitStack] = None
+        self._context_managers: list[AbstractContextManager] = []
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
         self._children.append(service)
@@ -90,8 +93,8 @@ class Service(ServiceWithCallbacks):
         await service.stop()
         return service
 
-    def add_context(self, context: AbstractContextManager) -> Any:
-        raise NotImplementedError(self)
+    def add_context(self, context: AbstractContextManager) -> None:
+        self._context_managers.append(context)
 
     async def add_async_context(
         self,
@@ -120,6 +123,13 @@ class Service(ServiceWithCallbacks):
                 )
             await async_exit_stack.__aenter__()
             self._async_context_managers.clear()
+
+        if self._context_managers:
+            exit_stack = self._exit_stack = ExitStack()
+            for context_manager in self._context_managers:
+                exit_stack.enter_context(context_manager)
+            exit_stack.__enter__()
+            self._context_managers.clear()
 
         for task in self._collect_tasks():
             async_task = asyncio.create_task(task(self))
@@ -150,6 +160,9 @@ class Service(ServiceWithCallbacks):
 
         if self._async_exit_stack:
             await self._async_exit_stack.__aexit__(None, None, None)
+
+        if self._exit_stack:
+            self._exit_stack.__exit__(None, None, None)
 
         running_tasks = [task for task in self._tasks if not task.done()]
         if running_tasks:

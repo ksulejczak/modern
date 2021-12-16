@@ -211,11 +211,23 @@ async def test_remove_dependency_invalid_dependency() -> None:
         await service.remove_dependency(dependency)
 
 
-def test_add_context() -> None:
+async def test_add_context() -> None:
     service = ServiceStub()
+    what: list[str] = []
 
-    with pytest.raises(NotImplementedError):
-        service.add_context(stub_contextmanager())
+    @contextmanager
+    def cm():
+        what.append("started")
+        yield None
+        what.append("stopped")
+
+    service.add_context(cm())
+    assert what == []
+
+    async with service:
+        assert what == ["started"]
+
+    assert what == ["started", "stopped"]
 
 
 async def test_add_async_context() -> None:
