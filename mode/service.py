@@ -68,7 +68,7 @@ class Service(ServiceWithCallbacks):
 
     def __init__(self) -> None:
         self._state = ServiceState.INIT
-        self._restart_count = 0
+        self._start_count = 0
         self._should_stop = False
         self._tasks: list[asyncio.Task] = []
         self._children: list[ServiceT] = []
@@ -103,10 +103,11 @@ class Service(ServiceWithCallbacks):
         self._async_context_managers.append(context)
 
     async def start(self) -> None:
-        if self._state is not ServiceState.INIT:
+        if self._state not in {ServiceState.INIT, ServiceState.SHUTDOWN}:
             raise ServiceAlreadyRunError(self._state)
         self._state = ServiceState.STARTING
-        if self._restart_count == 0:
+        self._stopped.clear()
+        if self._start_count == 0:
             await self.on_first_start()
         await self.on_start()
 
@@ -137,6 +138,7 @@ class Service(ServiceWithCallbacks):
 
         self._state = ServiceState.RUNNING
         await self.on_started()
+        self._start_count += 1
 
     async def maybe_start(self) -> bool:
         if self._state is ServiceState.INIT:
@@ -164,31 +166,26 @@ class Service(ServiceWithCallbacks):
         if self._exit_stack:
             self._exit_stack.__exit__(None, None, None)
 
-        running_tasks = [task for task in self._tasks if not task.done()]
-        if running_tasks:
-            await asyncio.wait(
-                running_tasks,
-                return_when=asyncio.ALL_COMPLETED,
-                timeout=0,
-            )
-            for task in running_tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.wait(
-                running_tasks,
-                return_when=asyncio.ALL_COMPLETED,
-                timeout=None,
-            )
+        await self._stop_running_tasks()
 
         self._stopped.set()
         self._state = ServiceState.SHUTDOWN
         await self.on_shutdown()
+        self._reset()
 
     def service_reset(self) -> None:
         raise NotImplementedError(self)
 
     async def restart(self) -> None:
-        raise NotImplementedError(self)
+        if self._state not in {
+            ServiceState.RUNNING,
+            ServiceState.CRASHED,
+            ServiceState.SHUTDOWN,
+        }:
+            raise ServiceNotRunError(self._state)
+        await self.stop()
+        await self.on_restart()
+        await self.start()
 
     async def wait_until_stopped(self) -> None:
         if self._stopped.is_set():
@@ -245,6 +242,32 @@ class Service(ServiceWithCallbacks):
                 seconds = getattr(attr_value, "_mode_timer", None)
                 if seconds is not None:
                     yield self._make_timer_task(attr_value, seconds)
+
+    def _reset(self) -> None:
+        self._should_stop = False
+        self._tasks.clear()
+        self._children.clear()
+        self._async_exit_stack = None
+        self._async_context_managers.clear()
+        self._exit_stack = None
+        self._context_managers.clear()
+
+    async def _stop_running_tasks(self) -> None:
+        running_tasks = [task for task in self._tasks if not task.done()]
+        if running_tasks:
+            await asyncio.wait(
+                running_tasks,
+                return_when=asyncio.ALL_COMPLETED,
+                timeout=0,
+            )
+            for task in running_tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.wait(
+                running_tasks,
+                return_when=asyncio.ALL_COMPLETED,
+                timeout=None,
+            )
 
 
 _Task = Callable[[Any], Awaitable[None]]

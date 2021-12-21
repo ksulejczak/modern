@@ -44,7 +44,7 @@ class ServiceStub(Service):
         self.callback_counts.shutdown += 1
 
     async def on_restart(self) -> None:
-        raise NotImplementedError(self)
+        self.callback_counts.restart += 1
 
     @Service.task
     async def task1(self) -> None:
@@ -90,6 +90,31 @@ async def test_on_first_start() -> None:
     assert service.callback_counts.first_start == 1
 
 
+async def test_on_first_start_is_run_only_once() -> None:
+    service = ServiceStub()
+    assert service.callback_counts.first_start == 0
+
+    async with service:
+        pass
+    async with service:
+        pass
+
+    assert service.callback_counts.first_start == 1
+
+
+async def test_on_first_start_is_not_run_on_restart() -> None:
+    service = ServiceStub()
+    assert service.callback_counts.first_start == 0
+
+    async with service:
+        pass
+    for _ in range(2):
+        await service.restart()
+
+    assert service.callback_counts.first_start == 1
+    await service.stop()
+
+
 async def test_on_start() -> None:
     service = ServiceStub()
     assert service.callback_counts.start == 0
@@ -129,8 +154,14 @@ async def test_on_shutdown() -> None:
 async def test_on_restart() -> None:
     service = ServiceStub()
 
-    with pytest.raises(NotImplementedError):
-        await service.on_restart()
+    await service.start()
+    assert service.callback_counts.restart == 0
+
+    await service.stop()
+    assert service.callback_counts.restart == 0
+
+    await service.restart()
+    assert service.callback_counts.restart == 1
 
 
 async def test_add_dependency_dependent_service_is_run_on_start() -> None:
@@ -331,11 +362,25 @@ def test_service_reset() -> None:
         service.service_reset()
 
 
-async def test_restart() -> None:
+async def test_restart_raises_if_service_is_not_run() -> None:
     service = ServiceStub()
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ServiceNotRunError):
         await service.restart()
+
+
+async def test_restart_stops_and_restarts_tasks() -> None:
+    service = ServiceStub()
+
+    async with service:
+        await asyncio.sleep(0.01)
+        assert service.task1_run == 1
+
+        await service.restart()
+
+        assert service.callback_counts.restart == 1
+        await asyncio.sleep(0.01)
+        assert service.task1_run == 2
 
 
 async def test_wait_until_stopped_raises_for_not_started_service() -> None:
