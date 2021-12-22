@@ -1,10 +1,24 @@
 from __future__ import annotations
 
 import abc
+import enum
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 
 
+class ServiceState(enum.Enum):
+    INIT = "init"
+    STARTING = "starting"
+    RUNNING = "running"
+    STOPPING = "stopping"
+    CRASHED = "crashed"
+    SHUTDOWN = "shutdown"
+
+
 class ServiceT(abc.ABC):
+    @abc.abstractmethod
+    def get_state(self) -> ServiceState:
+        ...  # pragma: no cover
+
     @abc.abstractmethod
     def add_dependency(self, service: ServiceT) -> ServiceT:
         ...  # pragma: no cover

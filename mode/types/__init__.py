@@ -1,5 +1,5 @@
-__all__ = ["DiagT", "ServiceT"]
+__all__ = ["DiagT", "ServiceState", "ServiceT"]
 
 
 from .diag import DiagT
-from .service import ServiceT
+from .service import ServiceState, ServiceT

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import enum
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -12,16 +11,7 @@ from functools import wraps
 from types import TracebackType
 from typing import Any, Awaitable, Callable, Optional, Type
 
-from .types import ServiceT
-
-
-class ServiceState(enum.Enum):
-    INIT = "init"
-    STARTING = "starting"
-    RUNNING = "running"
-    STOPPING = "stopping"
-    CRASHED = "crashed"
-    SHUTDOWN = "shutdown"
+from .types import ServiceState, ServiceT
 
 
 class ServiceError(Exception):
@@ -78,6 +68,9 @@ class Service(ServiceWithCallbacks):
         self._exit_stack: Optional[ExitStack] = None
         self._context_managers: list[AbstractContextManager] = []
         self._crash_reason: Optional[BaseException] = None
+
+    def get_state(self) -> ServiceState:
+        return self._state
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
         self._children.append(service)
