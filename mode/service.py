@@ -77,6 +77,7 @@ class Service(ServiceWithCallbacks):
         self._async_context_managers: list[AbstractAsyncContextManager] = []
         self._exit_stack: Optional[ExitStack] = None
         self._context_managers: list[AbstractContextManager] = []
+        self._crash_reason: Optional[BaseException] = None
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
         self._children.append(service)
@@ -148,30 +149,20 @@ class Service(ServiceWithCallbacks):
             return False
 
     async def crash(self, reason: BaseException) -> None:
-        raise NotImplementedError(self)
+        if self._state not in {ServiceState.RUNNING, ServiceState.STOPPING}:
+            raise ServiceNotRunError(self._state)
+        self._should_stop = True
+        await self._stop_running_tasks()
+        self._stopped.set()
+        for child in self._children:
+            await child.crash(reason)
+        self._crash_reason = reason
+        self._state = ServiceState.CRASHED
 
     async def stop(self) -> None:
         if self._stopped.is_set():
             return
-        self._state = ServiceState.STOPPING
-        await self.on_stop()
-        self._should_stop = True
-
-        if self._children:
-            await asyncio.gather(*(child.stop() for child in self._children))
-
-        if self._async_exit_stack:
-            await self._async_exit_stack.__aexit__(None, None, None)
-
-        if self._exit_stack:
-            self._exit_stack.__exit__(None, None, None)
-
-        await self._stop_running_tasks()
-
-        self._stopped.set()
-        self._state = ServiceState.SHUTDOWN
-        await self.on_shutdown()
-        self._reset()
+        await self._do_shutdown()
 
     def service_reset(self) -> None:
         raise NotImplementedError(self)
@@ -183,7 +174,7 @@ class Service(ServiceWithCallbacks):
             ServiceState.SHUTDOWN,
         }:
             raise ServiceNotRunError(self._state)
-        await self.stop()
+        await self._do_shutdown()
         await self.on_restart()
         await self.start()
 
@@ -251,6 +242,7 @@ class Service(ServiceWithCallbacks):
         self._async_context_managers.clear()
         self._exit_stack = None
         self._context_managers.clear()
+        self._crash_reason = None
 
     async def _stop_running_tasks(self) -> None:
         running_tasks = [task for task in self._tasks if not task.done()]
@@ -268,6 +260,27 @@ class Service(ServiceWithCallbacks):
                 return_when=asyncio.ALL_COMPLETED,
                 timeout=None,
             )
+
+    async def _do_shutdown(self) -> None:
+        self._state = ServiceState.STOPPING
+        await self.on_stop()
+        self._should_stop = True
+
+        if self._children:
+            await asyncio.gather(*(child.stop() for child in self._children))
+
+        if self._async_exit_stack:
+            await self._async_exit_stack.__aexit__(None, None, None)
+
+        if self._exit_stack:
+            self._exit_stack.__exit__(None, None, None)
+
+        await self._stop_running_tasks()
+
+        self._stopped.set()
+        self._state = ServiceState.SHUTDOWN
+        await self.on_shutdown()
+        self._reset()
 
 
 _Task = Callable[[Any], Awaitable[None]]

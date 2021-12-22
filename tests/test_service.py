@@ -317,11 +317,35 @@ async def test_maybe_start_on_running_service() -> None:
     await service.stop()
 
 
-async def test_crash() -> None:
+async def test_crash_raises_if_not_run() -> None:
     service = ServiceStub()
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ServiceNotRunError):
         await service.crash(ValueError())
+
+
+async def test_crash_stops_all_running_tasks() -> None:
+    service = ServiceStub.from_awaitable(asyncio.sleep(10))
+
+    time0 = monotonic()
+    async with service:
+        await service.crash(ValueError())
+    time1 = monotonic()
+
+    assert time1 - time0 < 1
+
+
+async def test_crash_propagetes_to_children() -> None:
+    service = ServiceStub()
+    dependency = ServiceStub.from_awaitable(asyncio.sleep(10))
+    service.add_dependency(dependency)
+
+    time0 = monotonic()
+    async with service:
+        await service.crash(ValueError())
+    time1 = monotonic()
+
+    assert time1 - time0 < 1
 
 
 async def test_stop_on_not_started_service() -> None:
@@ -381,6 +405,17 @@ async def test_restart_stops_and_restarts_tasks() -> None:
         assert service.callback_counts.restart == 1
         await asyncio.sleep(0.01)
         assert service.task1_run == 2
+
+
+async def test_restart_on_crashed_service() -> None:
+    service = ServiceStub()
+    async with service:
+        await service.crash(ValueError())
+    assert service.get_state() is ServiceState.CRASHED
+
+    await service.restart()
+
+    assert service.get_state() is ServiceState.RUNNING
 
 
 async def test_wait_until_stopped_raises_for_not_started_service() -> None:
