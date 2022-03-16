@@ -97,7 +97,7 @@ class Service(ServiceWithCallbacks):
         self._async_context_managers.append(context)
 
     async def start(self) -> None:
-        if self._state not in {ServiceState.INIT, ServiceState.SHUTDOWN}:
+        if self._state not in _STATES_INACTIVE:
             raise ServiceAlreadyRunError(self._state)
         self._state = ServiceState.STARTING
         self._stopped.clear()
@@ -142,7 +142,7 @@ class Service(ServiceWithCallbacks):
             return False
 
     async def crash(self, reason: BaseException) -> None:
-        if self._state not in {ServiceState.RUNNING, ServiceState.STOPPING}:
+        if self._state not in _STATES_ACTIVE:
             raise ServiceNotRunError(self._state)
         self._should_stop = True
         await self._stop_running_tasks()
@@ -161,11 +161,7 @@ class Service(ServiceWithCallbacks):
         raise NotImplementedError(self)
 
     async def restart(self) -> None:
-        if self._state not in {
-            ServiceState.RUNNING,
-            ServiceState.CRASHED,
-            ServiceState.SHUTDOWN,
-        }:
+        if self._state not in _STATES_RESTARTABLE:
             raise ServiceNotRunError(self._state)
         await self._do_shutdown()
         await self.on_restart()
@@ -277,3 +273,8 @@ class Service(ServiceWithCallbacks):
 
 
 _Task = Callable[[Any], Awaitable[None]]
+_STATES_ACTIVE = frozenset({ServiceState.RUNNING, ServiceState.STOPPING})
+_STATES_INACTIVE = frozenset({ServiceState.INIT, ServiceState.SHUTDOWN})
+_STATES_RESTARTABLE = frozenset(
+    {ServiceState.RUNNING, ServiceState.CRASHED, ServiceState.SHUTDOWN}
+)
