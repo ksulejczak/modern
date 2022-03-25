@@ -126,9 +126,7 @@ class Service(ServiceWithCallbacks):
             exit_stack.__enter__()
             self._context_managers.clear()
 
-        for task in self._collect_tasks():
-            async_task = asyncio.create_task(task(self))
-            self._tasks.append(async_task)
+        await self._create_my_tasks()
 
         self._state = ServiceState.RUNNING
         await self.on_started()
@@ -201,6 +199,11 @@ class Service(ServiceWithCallbacks):
             return fun
 
         return _decorate
+
+    async def _create_my_tasks(self) -> None:
+        for task in self._collect_tasks():
+            async_task = asyncio.create_task(task(self))
+            self._tasks.append(async_task)
 
     def _make_timer_task(self, fun: _Task, interval: float) -> _Task:
         @wraps(fun)
