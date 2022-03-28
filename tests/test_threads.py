@@ -97,10 +97,8 @@ async def test_on_first_start_is_run_only_once() -> None:
     assert service.callback_counts.first_start == 0
 
     async with service:
-        print("START 1")
         pass
     async with service:
-        print("START 2")
         pass
 
     assert service.callback_counts.first_start == 1
@@ -166,6 +164,8 @@ async def test_on_restart() -> None:
 
     await service.restart()
     assert service.callback_counts.restart == 1
+
+    await service.stop()
 
 
 async def test_get_state() -> None:
@@ -316,10 +316,10 @@ async def test_start() -> None:
 
 async def test_start_on_already_started_service() -> None:
     service = ServiceStub()
-    await service.start()
 
-    with pytest.raises(ServiceAlreadyRunError):
-        await service.start()
+    async with service:
+        with pytest.raises(ServiceAlreadyRunError):
+            await service.start()
 
 
 async def test_maybe_start_on_not_running_service() -> None:
@@ -426,6 +426,8 @@ async def test_restart_raises_if_service_is_not_run() -> None:
     with pytest.raises(ServiceNotRunError):
         await service.restart()
 
+    await service.stop()
+
 
 async def test_restart_stops_and_restarts_tasks() -> None:
     service = ServiceStub()
@@ -451,8 +453,8 @@ async def test_restart_on_crashed_service() -> None:
     assert service.get_state() is ServiceState.CRASHED
 
     await service.restart()
-
     assert service.get_state() is ServiceState.RUNNING
+    await service.stop()
 
 
 async def test_wait_until_stopped_raises_for_not_started_service() -> None:
