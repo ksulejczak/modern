@@ -1,4 +1,4 @@
-from mode.diag import Diag
+from modern.diag import Diag
 
 
 def test_set_flag() -> None:

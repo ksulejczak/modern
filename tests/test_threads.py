@@ -6,9 +6,9 @@ from typing import AsyncGenerator, Generator
 
 import pytest
 
-from mode.service import Service, ServiceAlreadyRunError, ServiceNotRunError
-from mode.threads import ServiceThread
-from mode.types import ServiceState
+from modern.service import Service, ServiceAlreadyRunError, ServiceNotRunError
+from modern.threads import ServiceThread
+from modern.types import ServiceState
 
 pytestmark = [pytest.mark.asyncio]
 
