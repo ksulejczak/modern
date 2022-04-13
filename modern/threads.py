@@ -1,7 +1,6 @@
 import asyncio
 from dataclasses import dataclass
 from threading import Thread
-from typing import Optional
 
 from .service import Service
 
@@ -16,10 +15,10 @@ class ThreadEvents:
 class ServiceThread(Service):
     def __init__(self) -> None:
         super().__init__()
-        self._thread: Optional[Thread] = None
-        self._parent_loop: Optional[asyncio.AbstractEventLoop] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._events: Optional[ThreadEvents] = None
+        self._thread: Thread | None = None
+        self._parent_loop: asyncio.AbstractEventLoop | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._events: ThreadEvents | None = None
 
     async def _create_my_tasks(self) -> None:
         # this method is supposed to run in parent loop

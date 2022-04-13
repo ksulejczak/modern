@@ -9,7 +9,7 @@ from contextlib import (
 )
 from functools import wraps
 from types import TracebackType
-from typing import Any, Awaitable, Callable, Optional, Type
+from typing import Any, Awaitable, Callable, Type
 
 from .types import ServiceState, ServiceT
 
@@ -63,11 +63,11 @@ class Service(ServiceWithCallbacks):
         self._tasks: list[asyncio.Task] = []
         self._children: list[ServiceT] = []
         self._stopped = asyncio.Event()
-        self._async_exit_stack: Optional[AsyncExitStack] = None
+        self._async_exit_stack: AsyncExitStack | None = None
         self._async_context_managers: list[AbstractAsyncContextManager] = []
-        self._exit_stack: Optional[ExitStack] = None
+        self._exit_stack: ExitStack | None = None
         self._context_managers: list[AbstractContextManager] = []
-        self._crash_reason: Optional[BaseException] = None
+        self._crash_reason: BaseException | None = None
 
     def get_state(self) -> ServiceState:
         return self._state
