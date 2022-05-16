@@ -9,8 +9,6 @@ import pytest
 from modern.service import Service, ServiceAlreadyRunError, ServiceNotRunError
 from modern.types import ServiceState
 
-pytestmark = [pytest.mark.asyncio]
-
 
 @dataclass
 class CallbackCounts:
@@ -67,6 +65,7 @@ async def stub_asynccontextmanager() -> AsyncGenerator[None, None]:
     yield None
 
 
+@pytest.mark.asyncio
 async def test_from_awaitable() -> None:
     calls: list[int] = []
 
@@ -81,6 +80,7 @@ async def test_from_awaitable() -> None:
     assert calls == [1]
 
 
+@pytest.mark.asyncio
 async def test_on_first_start() -> None:
     service = ServiceStub()
     assert service.callback_counts.first_start == 0
@@ -91,6 +91,7 @@ async def test_on_first_start() -> None:
     assert service.callback_counts.first_start == 1
 
 
+@pytest.mark.asyncio
 async def test_on_first_start_is_run_only_once() -> None:
     service = ServiceStub()
     assert service.callback_counts.first_start == 0
@@ -103,6 +104,7 @@ async def test_on_first_start_is_run_only_once() -> None:
     assert service.callback_counts.first_start == 1
 
 
+@pytest.mark.asyncio
 async def test_on_first_start_is_not_run_on_restart() -> None:
     service = ServiceStub()
     assert service.callback_counts.first_start == 0
@@ -116,6 +118,7 @@ async def test_on_first_start_is_not_run_on_restart() -> None:
     await service.stop()
 
 
+@pytest.mark.asyncio
 async def test_on_start() -> None:
     service = ServiceStub()
     assert service.callback_counts.start == 0
@@ -124,6 +127,7 @@ async def test_on_start() -> None:
         assert service.callback_counts.start == 1
 
 
+@pytest.mark.asyncio
 async def test_on_started() -> None:
     service = ServiceStub()
     assert service.callback_counts.started == 0
@@ -132,6 +136,7 @@ async def test_on_started() -> None:
         assert service.callback_counts.started == 1
 
 
+@pytest.mark.asyncio
 async def test_on_stop() -> None:
     service = ServiceStub()
     await service.start()
@@ -142,6 +147,7 @@ async def test_on_stop() -> None:
     assert service.callback_counts.stop == 1
 
 
+@pytest.mark.asyncio
 async def test_on_shutdown() -> None:
     service = ServiceStub()
     await service.start()
@@ -152,6 +158,7 @@ async def test_on_shutdown() -> None:
     assert service.callback_counts.shutdown == 1
 
 
+@pytest.mark.asyncio
 async def test_on_restart() -> None:
     service = ServiceStub()
 
@@ -165,6 +172,7 @@ async def test_on_restart() -> None:
     assert service.callback_counts.restart == 1
 
 
+@pytest.mark.asyncio
 async def test_get_state() -> None:
     service = ServiceStub()
 
@@ -176,6 +184,7 @@ async def test_get_state() -> None:
     assert service.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_add_dependency_dependent_service_is_run_on_start() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
@@ -192,6 +201,7 @@ async def test_add_dependency_dependent_service_is_run_on_start() -> None:
     assert dependency.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_add_dependency_dependent_service_is_stopped_on_stop() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
@@ -205,6 +215,7 @@ async def test_add_dependency_dependent_service_is_stopped_on_stop() -> None:
     assert dependency.callback_counts.stop == 1
 
 
+@pytest.mark.asyncio
 async def test_add_runtime_dependency_attach_to_not_started_service() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
@@ -223,6 +234,7 @@ async def test_add_runtime_dependency_attach_to_not_started_service() -> None:
     assert dependency.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_add_runtime_dependency_attach_to_not_running_service() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
@@ -240,6 +252,7 @@ async def test_add_runtime_dependency_attach_to_not_running_service() -> None:
     assert dependency.callback_counts.stop == 1
 
 
+@pytest.mark.asyncio
 async def test_remove_dependency_existing_dependecy_is_stopped() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
@@ -255,6 +268,7 @@ async def test_remove_dependency_existing_dependecy_is_stopped() -> None:
         assert dependency.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_remove_dependency_invalid_dependency() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
@@ -263,6 +277,7 @@ async def test_remove_dependency_invalid_dependency() -> None:
         await service.remove_dependency(dependency)
 
 
+@pytest.mark.asyncio
 async def test_add_context() -> None:
     service = ServiceStub()
     what: list[str] = []
@@ -282,6 +297,7 @@ async def test_add_context() -> None:
     assert what == ["started", "stopped"]
 
 
+@pytest.mark.asyncio
 async def test_add_async_context() -> None:
     service = ServiceStub()
     what: list[str] = []
@@ -301,6 +317,7 @@ async def test_add_async_context() -> None:
     assert what == ["started", "stopped"]
 
 
+@pytest.mark.asyncio
 async def test_start() -> None:
     service = ServiceStub()
 
@@ -311,6 +328,7 @@ async def test_start() -> None:
     assert service.timer1_run > 0
 
 
+@pytest.mark.asyncio
 async def test_start_on_already_started_service() -> None:
     service = ServiceStub()
     await service.start()
@@ -319,6 +337,7 @@ async def test_start_on_already_started_service() -> None:
         await service.start()
 
 
+@pytest.mark.asyncio
 async def test_maybe_start_on_not_running_service() -> None:
     service = ServiceStub()
 
@@ -328,6 +347,7 @@ async def test_maybe_start_on_not_running_service() -> None:
     await service.stop()
 
 
+@pytest.mark.asyncio
 async def test_maybe_start_on_running_service() -> None:
     service = ServiceStub()
     await service.start()
@@ -338,6 +358,7 @@ async def test_maybe_start_on_running_service() -> None:
     await service.stop()
 
 
+@pytest.mark.asyncio
 async def test_crash_raises_if_not_run() -> None:
     service = ServiceStub()
 
@@ -347,6 +368,7 @@ async def test_crash_raises_if_not_run() -> None:
     assert service.get_state() is ServiceState.INIT
 
 
+@pytest.mark.asyncio
 async def test_crash_stops_all_running_tasks() -> None:
     service = ServiceStub.from_awaitable(asyncio.sleep(10))
 
@@ -358,6 +380,7 @@ async def test_crash_stops_all_running_tasks() -> None:
     assert time1 - time0 < 1
 
 
+@pytest.mark.asyncio
 async def test_crash_propagetes_to_children() -> None:
     service = ServiceStub()
     dependency = ServiceStub.from_awaitable(asyncio.sleep(10))
@@ -373,6 +396,7 @@ async def test_crash_propagetes_to_children() -> None:
     assert dependency.get_state() is ServiceState.CRASHED
 
 
+@pytest.mark.asyncio
 async def test_stop_on_not_started_service() -> None:
     service = ServiceStub()
 
@@ -381,6 +405,7 @@ async def test_stop_on_not_started_service() -> None:
     assert service.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_stop_on_started_service() -> None:
     service = ServiceStub()
     await service.start()
@@ -390,6 +415,7 @@ async def test_stop_on_started_service() -> None:
     assert service.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_stop_on_already_stopped_service() -> None:
     service = ServiceStub()
     await service.stop()
@@ -399,6 +425,7 @@ async def test_stop_on_already_stopped_service() -> None:
     assert service.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_stop_on_long_running_service_cancels_tasks() -> None:
     long_runing_service = Service.from_awaitable(asyncio.sleep(10))
 
@@ -417,6 +444,7 @@ def test_service_reset() -> None:
         service.service_reset()
 
 
+@pytest.mark.asyncio
 async def test_restart_raises_if_service_is_not_run() -> None:
     service = ServiceStub()
 
@@ -424,6 +452,7 @@ async def test_restart_raises_if_service_is_not_run() -> None:
         await service.restart()
 
 
+@pytest.mark.asyncio
 async def test_restart_stops_and_restarts_tasks() -> None:
     service = ServiceStub()
 
@@ -441,6 +470,7 @@ async def test_restart_stops_and_restarts_tasks() -> None:
     assert service.get_state() is ServiceState.SHUTDOWN
 
 
+@pytest.mark.asyncio
 async def test_restart_on_crashed_service() -> None:
     service = ServiceStub()
     async with service:
@@ -452,6 +482,7 @@ async def test_restart_on_crashed_service() -> None:
     assert service.get_state() is ServiceState.RUNNING
 
 
+@pytest.mark.asyncio
 async def test_wait_until_stopped_raises_for_not_started_service() -> None:
     service = ServiceStub()
 
@@ -459,6 +490,7 @@ async def test_wait_until_stopped_raises_for_not_started_service() -> None:
         await service.wait_until_stopped()
 
 
+@pytest.mark.asyncio
 async def test_wait_until_stopped_for_stopped_service() -> None:
     service = ServiceStub()
     await service.stop()
@@ -466,6 +498,7 @@ async def test_wait_until_stopped_for_stopped_service() -> None:
     await service.wait_until_stopped()
 
 
+@pytest.mark.asyncio
 async def test_wait_until_stopped_for_running_service() -> None:
     async def _stop_later():
         await asyncio.sleep(0.05)
@@ -490,6 +523,7 @@ def test_set_shutdown() -> None:
         service.set_shutdown()
 
 
+@pytest.mark.asyncio
 async def test_service_as_context_manager() -> None:
     service = ServiceStub()
 
