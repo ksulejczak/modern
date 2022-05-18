@@ -3,6 +3,10 @@ from typing import ClassVar, Generic, TypeVar
 T = TypeVar("T")
 
 
+class CodecError(Exception):
+    pass
+
+
 class Codec(Generic[T]):
     name: ClassVar[str]
 
