@@ -1,3 +1,4 @@
-__all__ = ["Codec"]
+__all__ = ["BytesCodec", "Codec"]
 
 from .base import Codec
+from .codec_bytes import BytesCodec
