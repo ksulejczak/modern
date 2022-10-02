@@ -181,9 +181,9 @@ class Service(ServiceWithCallbacks):
 
     async def __aexit__(
         self,
-        exc_type: Type[BaseException] = None,
-        exc_val: BaseException = None,
-        exc_tb: TracebackType = None,
+        exc_type: Type[BaseException] | None = None,
+        exc_val: BaseException | None = None,
+        exc_tb: TracebackType | None = None,
     ) -> None:
         await self.stop()
 
