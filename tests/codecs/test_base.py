@@ -1,72 +1,77 @@
 import pytest
 
-from modern.codecs.base import Codec, CodecError
-
-
-def test_in_raises() -> None:
-    codec: Codec[int] = Codec()
-
-    with pytest.raises(NotImplementedError):
-        codec.in_(b"")
-
-
-def test_out_raises() -> None:
-    codec: Codec[int] = Codec()
-
-    with pytest.raises(NotImplementedError):
-        codec.out(1)
+from modern.codecs.base import Codec, CodecError, CombinedCodec, NoopCodec
 
 
 def test_or_codec_in_returns_left() -> None:
     value = b"test text"
-    codec: Codec[str] = STR_CODEC | STR_FAILING_CODEC
+    codec = STR_CODEC | STR_FAILING_CODEC
 
-    in_value = codec.in_(value)
+    in_value = codec(value)
 
     assert in_value == "test text"
 
 
 def test_or_codec_in_returns_right() -> None:
     value = b"test text"
-    codec: Codec[str] = STR_FAILING_CODEC | STR_CODEC
+    codec = STR_FAILING_CODEC | STR_CODEC
 
-    in_value = codec.in_(value)
+    in_value = codec(value)
 
     assert in_value == "test text"
 
 
 def test_or_codec_raises_if_both_sides_fail() -> None:
     value = b"test text"
-    codec: Codec[str] = STR_FAILING_CODEC | STR_FAILING_CODEC
+    codec = STR_FAILING_CODEC | STR_FAILING_CODEC
 
     with pytest.raises(CodecError):
-        codec.in_(value)
+        codec(value)
 
 
-def test_or_codec_out_value_from_left_side() -> None:
-    value = "test text"
-    codec: Codec[str] = STR_CODEC | STR_FAILING_CODEC
+def test_noop_codec_in() -> None:
+    value = "a b c"
 
-    out_value = codec.out(value)
+    in_value = STR_NOOP_CODEC(value)
 
-    assert out_value == b"test text"
+    assert in_value is value
 
 
-class StrTestCodec(Codec[str]):
-    def in_(self, data: bytes) -> str:
+def test_combined_codec_in() -> None:
+    value = b"123"
+
+    in_value = BYTES_TO_INT_COMBINED_CODEC(value)
+
+    assert in_value == 123
+
+
+class StrTestCodec(Codec[bytes, str]):
+    def __call__(self, data: bytes) -> str:
         return data.decode()
 
-    def out(self, value: str) -> bytes:
-        return value.encode()
+
+class IntTestCodec(Codec[str, int]):
+    def __call__(self, data: str) -> int:
+        return int(data)
 
 
-class FailingStrTestCodec(Codec[str]):
-    def in_(self, data: bytes) -> str:
+class FailingStrTestCodec(Codec[bytes, str]):
+    def __call__(self, data: bytes) -> str:
         raise CodecError(data)
 
-    def out(self, value: str) -> bytes:
-        return value.encode() + b"SENTINEL"
+
+class StrNoopCodec(NoopCodec[str]):
+    pass
+
+
+class BytesToIntCombinedCodec(CombinedCodec[bytes, str, int]):
+    pass
 
 
 STR_CODEC = StrTestCodec()
 STR_FAILING_CODEC = FailingStrTestCodec()
+STR_NOOP_CODEC = StrNoopCodec()
+BYTES_TO_INT_COMBINED_CODEC = BytesToIntCombinedCodec(
+    first=StrTestCodec(),
+    second=IntTestCodec(),
+)
