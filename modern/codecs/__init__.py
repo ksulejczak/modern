@@ -8,6 +8,7 @@ __all__ = [
     "FloatToIntCodec",
     "FloatToIntRoundCodec",
     "FloatToStrCodec",
+    "IntToBoolCodec",
     "IntToFloatCodec",
     "IntToStrCodec",
     "StrToBoolCodec",
@@ -33,6 +34,7 @@ from .codec_float_int import (
     FloatToIntRoundCodec,
     IntToFloatCodec,
 )
+from .codec_int_bool import IntToBoolCodec
 from .codec_str_bool import StrToBoolCodec
 from .codec_str_datetime_isoformat import (
     DatetimeToStrIsoformatCodec,
