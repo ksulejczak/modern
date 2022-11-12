@@ -10,6 +10,7 @@ __all__ = [
     "FloatToStrCodec",
     "IntToFloatCodec",
     "IntToStrCodec",
+    "StrToBoolCodec",
     "StrToBytesCodec",
     "StrToDatetimeIsoformatCodec",
     "StrToFloatCodec",
@@ -32,6 +33,7 @@ from .codec_float_int import (
     FloatToIntRoundCodec,
     IntToFloatCodec,
 )
+from .codec_str_bool import StrToBoolCodec
 from .codec_str_datetime_isoformat import (
     DatetimeToStrIsoformatCodec,
     StrToDatetimeIsoformatCodec,
