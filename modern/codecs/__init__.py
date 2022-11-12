@@ -1,4 +1,5 @@
 __all__ = [
+    "BoolToIntCodec",
     "BytesToStrCodec",
     "Codec",
     "CodecError",
@@ -24,6 +25,7 @@ __all__ = [
 
 from . import instances
 from .base import Codec, CodecError
+from .codec_bool_int import BoolToIntCodec
 from .codec_bytes_str import BytesToStrCodec, StrToBytesCodec
 from .codec_float_datetime_timestamp import (
     DatetimeToFloatTimestampCodec,
