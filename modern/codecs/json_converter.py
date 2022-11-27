@@ -2,6 +2,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum
+from inspect import isclass
 from types import GenericAlias, UnionType
 from typing import Any, Generic, TypeVar, overload
 from uuid import UUID
@@ -177,6 +178,61 @@ def make_json_decoder(dclass):
     return _make_dataclass_decoder(dclass)
 
 
+class _NoopCodecWithTypecheck(Codec):
+    def __init__(self, type_: type) -> None:
+        self._type = type_
+
+    def __call__(self, data: Any) -> Any:
+        if not isinstance(data, self._type):
+            raise CodecError(data)
+        return data
+
+
+_PLAIN_ENCODER_MAPPING = {
+    None.__class__: _NoopCodecWithTypecheck(None.__class__),
+    bool: _NoopCodecWithTypecheck(bool),
+    int: _NoopCodecWithTypecheck(int),
+    float: _NoopCodecWithTypecheck(float),
+    str: _NoopCodecWithTypecheck(str),
+    datetime: instances.datetime_to_str_isoformat_utc,
+    UUID: instances.uuid_to_str,
+}
+
+_STR_CODECS = {
+    bool: instances.bool_to_str,
+    int: instances.int_to_str,
+    float: instances.float_to_str,
+    str: NoopCodec(),
+    datetime: instances.datetime_to_str_isoformat_utc,
+    UUID: instances.uuid_to_str,
+}
+
+
+JET = TypeVar("JET")
+
+
+def make_json_encoder(dclass: type[JET]) -> Codec[JET, JsonValue]:
+    known_codec = _PLAIN_ENCODER_MAPPING.get(dclass)
+    if known_codec is not None:
+        return known_codec
+
+    if isinstance(dclass, GenericAliases):
+        origin = dclass.__origin__  # type: ignore[attr-defined]
+        if isclass(origin):
+            if issubclass(origin, tuple):
+                return _make_tuple_encoder(dclass)
+            if issubclass(origin, Sequence):
+                return _make_list_encoder(dclass)
+            if issubclass(origin, Mapping):
+                return _make_mapping_encoder(dclass)
+
+    if isinstance(dclass, UnionTypes):
+        return _make_union_encoder(dclass)
+    if issubclass(dclass, Enum):
+        return _make_enum_encoder(dclass)
+    return _make_dataclass_encoder(dclass)
+
+
 CCT = TypeVar("CCT")
 
 
@@ -335,3 +391,128 @@ def _make_dataclass_decoder(dclass: type[DCT]) -> Codec[JsonValue, DCT]:
         codec_by_name[field.name] = make_json_decoder(field.type)
 
     return _ObjectCodec(codec_by_name, dclass)
+
+
+class _ContainerEncoder(Codec):
+    def __init__(self, item_encoder: Codec) -> None:
+        self._item_encoder = item_encoder
+
+    def __call__(self, data) -> list:
+        if not isinstance(data, Sequence):
+            raise CodecError(data)
+        return list(map(self._item_encoder, data))
+
+
+class _StructEncoder(Codec):
+    def __init__(self, encoders: list[Codec]) -> None:
+        self._encoders = encoders
+
+    def __call__(self, data) -> list[Any]:
+        if not isinstance(data, Sequence):
+            raise CodecError(data)
+        if len(data) != len(self._encoders):
+            raise CodecError(data)
+        return [codec(item) for item, codec in zip(data, self._encoders)]
+
+
+def _make_tuple_encoder(dclass) -> Codec:
+    args = dclass.__args__
+    if len(args) == 2 and args[1] is Ellipsis:
+        item_encoder = make_json_encoder(args[0])
+        return _ContainerEncoder(item_encoder)
+    else:
+        encoders = list(map(make_json_encoder, args))
+        return _StructEncoder(encoders)
+
+
+def _make_list_encoder(dclass) -> Codec:
+    args = dclass.__args__
+    if len(args) != 1:
+        raise TypeError("Cannot handle type", dclass)
+    item_encoder = make_json_encoder(args[0])
+    return _ContainerEncoder(item_encoder)
+
+
+class _MappingEncoder(Codec):
+    def __init__(self, key_codec, value_codec) -> None:
+        self._key_codec = key_codec
+        self._value_codec = value_codec
+
+    def __call__(self, data) -> dict[str, Any]:
+        if not isinstance(data, Mapping):
+            raise CodecError(data)
+        d = {}
+        for key, value in data.items():
+            encoded_key = self._key_codec(key)
+            encoded_value = self._value_codec(value)
+            d[encoded_key] = encoded_value
+        return d
+
+
+def _make_mapping_encoder(dclass) -> Codec:
+    args = dclass.__args__
+    if len(args) != 2:
+        raise TypeError("Cannot handle type", dclass)
+    key_codec = _STR_CODECS.get(args[0])
+    if key_codec is None:
+        raise TypeError("Cannot use type as dictionary key", dclass)
+    value_codec: Codec[JsonValue, Any] = make_json_encoder(args[1])
+    return _MappingEncoder(key_codec, value_codec)
+
+
+class _UnionEncoder(Codec):
+    def __init__(self, types_encoder: list[Codec[Any, JsonValue]]):
+        self._types_encoder = types_encoder
+
+    def __call__(self, data) -> JsonValue:
+        for codec in self._types_encoder:
+            try:
+                return codec(data)
+            except CodecError:
+                pass
+        else:
+            raise CodecError(data)
+
+
+def _make_union_encoder(dclass) -> Codec:
+    encoders = list(map(make_json_encoder, dclass.__args__))
+    return _UnionEncoder(encoders)
+
+
+class _EnumEncoder(Codec):
+    def __call__(self, data: Enum) -> str:
+        return data.name
+
+
+_ENUM_ENCODER = _EnumEncoder()
+
+
+def _make_enum_encoder(dclass: type[Enum]) -> Codec:
+    return _ENUM_ENCODER
+
+
+class _ObjectEncoder(Codec):
+    def __init__(
+        self,
+        type_: type,
+        field_codecs: Mapping[str, Codec],
+    ) -> None:
+        self._type = type_
+        self._field_codecs = field_codecs
+
+    def __call__(self, data) -> dict[str, Any]:
+        if not isinstance(data, self._type):
+            raise CodecError(data)
+        d = {}
+        for name, codec in self._field_codecs.items():
+            d[name] = codec(getattr(data, name))
+
+        return d
+
+
+def _make_dataclass_encoder(dclass) -> Codec:
+    codec_by_name = {}
+    for field in fields(dclass):
+        codec_by_name[field.name] = make_json_encoder(field.type)
+
+    return _ObjectEncoder(dclass, codec_by_name)
