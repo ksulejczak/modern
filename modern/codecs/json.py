@@ -1,3 +1,11 @@
+__all__ = [
+    "make_json_decoder",
+    "make_json_deserializer",
+    "make_json_encoder",
+    "make_json_serializer",
+]
+
+import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import datetime
@@ -178,6 +186,19 @@ def make_json_decoder(dclass: Any) -> Codec[JsonValue, Any]:
     return _make_dataclass_decoder(dclass)
 
 
+class _BytesToJson(Codec[bytes, JsonValue]):
+    def __call__(self, data: bytes) -> JsonValue:
+        return json.loads(data)
+
+
+_BYTES_TO_JSON = _BytesToJson()
+
+
+def make_json_deserializer(dclass: type[JDT]) -> Codec[bytes, JDT]:
+    codec = make_json_decoder(dclass)
+    return CombinedCodec(_BYTES_TO_JSON, codec)
+
+
 class _NoopCodecWithTypecheck(Codec):
     def __init__(self, type_: type) -> None:
         self._type = type_
@@ -231,6 +252,19 @@ def make_json_encoder(dclass: type[JET]) -> Codec[JET, JsonValue]:
     if issubclass(dclass, Enum):
         return _make_enum_encoder(dclass)
     return _make_dataclass_encoder(dclass)
+
+
+class _JsonToBytes(Codec[JsonValue, bytes]):
+    def __call__(self, data: JsonValue) -> bytes:
+        return json.dumps(data).encode()
+
+
+_JSON_TO_BYTES = _JsonToBytes()
+
+
+def make_json_serializer(dclass: type[JDT]) -> Codec[JDT, bytes]:
+    codec = make_json_encoder(dclass)
+    return CombinedCodec(codec, _JSON_TO_BYTES)
 
 
 CCT = TypeVar("CCT")
