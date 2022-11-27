@@ -1,4 +1,8 @@
-__all__ = ["EnumType", "GenericAliases", "UnionTypes"]
+__all__ = [
+    "EnumType",
+    "GenericAliases",
+    "UnionTypes",
+]
 
 import types
 import typing

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Coroutine
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
     AsyncExitStack,
     ExitStack,
 )
-from functools import wraps
 from types import TracebackType
-from typing import Any, Awaitable, Callable, Type
+from typing import Any
 
 from .types import ServiceState, ServiceT
 
@@ -48,18 +48,16 @@ class ServiceWithCallbacks(ServiceT):
 
 class Service(ServiceWithCallbacks):
     @classmethod
-    def from_awaitable(cls: Type[Service], coro: Awaitable[Any]) -> Service:
-        class _SericeFromAwaitable(cls):  # type: ignore
-            @Service.task
-            async def task(self) -> None:
-                await coro
-
-        return _SericeFromAwaitable()
+    def from_awaitable(cls: type[Service], coro: _Task) -> Service:
+        service = cls()
+        service.add_task(coro)
+        return service
 
     def __init__(self) -> None:
         self._state = ServiceState.INIT
         self._start_count = 0
         self._should_stop = False
+        self._tasks_to_start: list[_Task] = []
         self._tasks: list[asyncio.Task] = []
         self._children: list[ServiceT] = []
         self._stopped = asyncio.Event()
@@ -181,50 +179,30 @@ class Service(ServiceWithCallbacks):
 
     async def __aexit__(
         self,
-        exc_type: Type[BaseException] | None = None,
+        exc_type: type[BaseException] | None = None,
         exc_val: BaseException | None = None,
         exc_tb: TracebackType | None = None,
     ) -> None:
         await self.stop()
 
-    @classmethod
-    def task(cls, fun: _Task) -> _Task:
-        fun._mode_task = True  # type: ignore
-        return fun
+    def add_task(self, func: _Task) -> None:
+        if self._state is not ServiceState.INIT:
+            raise ServiceAlreadyRunError(self._state)
+        self._tasks_to_start.append(func)
 
-    @classmethod
-    def timer(cls, interval: float) -> Callable[[_Task], _Task]:
-        def _decorate(fun: _Task) -> _Task:
-            fun._mode_timer = interval  # type: ignore
-            return fun
-
-        return _decorate
-
-    async def _create_my_tasks(self) -> None:
-        for task in self._collect_tasks():
-            async_task = asyncio.create_task(task(self))
-            self._tasks.append(async_task)
-
-    def _make_timer_task(self, fun: _Task, interval: float) -> _Task:
-        @wraps(fun)
-        async def _timer(self: Service) -> None:
+    def add_timer_task(self, func: _Task, interval: float) -> None:
+        async def _timer() -> None:
             while self._should_stop is False:
                 await asyncio.sleep(interval)
                 if not self._should_stop:
-                    await fun(self)
+                    await func()
 
-        return _timer
+        self.add_task(_timer)
 
-    def _collect_tasks(self):
-        for klass in self.__class__.__mro__:
-            if not issubclass(klass, Service):
-                continue
-            for attr_value in klass.__dict__.values():
-                if getattr(attr_value, "_mode_task", False) is True:
-                    yield attr_value
-                seconds = getattr(attr_value, "_mode_timer", None)
-                if seconds is not None:
-                    yield self._make_timer_task(attr_value, seconds)
+    async def _create_my_tasks(self) -> None:
+        for task in self._tasks_to_start:
+            async_task = asyncio.create_task(task())
+            self._tasks.append(async_task)
 
     def _reset(self) -> None:
         self._should_stop = False
@@ -275,7 +253,7 @@ class Service(ServiceWithCallbacks):
         self._reset()
 
 
-_Task = Callable[[Any], Awaitable[None]]
+_Task = Callable[[], Coroutine[Any, Any, None]]
 _STATES_ACTIVE = frozenset({ServiceState.RUNNING, ServiceState.STOPPING})
 _STATES_INACTIVE = frozenset({ServiceState.INIT, ServiceState.SHUTDOWN})
 _STATES_RESTARTABLE = frozenset(

@@ -45,15 +45,6 @@ class ServiceStub(Service):
     async def on_restart(self) -> None:
         self.callback_counts.restart += 1
 
-    @Service.task
-    async def task1(self) -> None:
-        await asyncio.sleep(0)
-        self.task1_run += 1
-
-    @Service.timer(interval=0.01)
-    async def timer1(self) -> None:
-        self.timer1_run += 1
-
 
 @contextmanager
 def stub_contextmanager() -> Generator[None, None, None]:
@@ -72,7 +63,7 @@ async def test_from_awaitable() -> None:
     async def call() -> None:
         calls.append(1)
 
-    service = Service.from_awaitable(call())
+    service = Service.from_awaitable(call)
 
     assert isinstance(service, Service)
     async with service:
@@ -283,7 +274,7 @@ async def test_add_context() -> None:
     what: list[str] = []
 
     @contextmanager
-    def cm():
+    def cm() -> Generator[None, None, None]:
         what.append("started")
         yield None
         what.append("stopped")
@@ -303,7 +294,7 @@ async def test_add_async_context() -> None:
     what: list[str] = []
 
     @asynccontextmanager
-    async def cm():
+    async def cm() -> AsyncGenerator[None, None]:
         what.append("started")
         yield None
         what.append("stopped")
@@ -320,12 +311,13 @@ async def test_add_async_context() -> None:
 @pytest.mark.asyncio
 async def test_start() -> None:
     service = ServiceStub()
+    counts = _add_tasks_to_service(service)
 
     async with service:
         await asyncio.sleep(0.02)
 
-    assert service.task1_run == 1
-    assert service.timer1_run > 0
+    assert counts.task1_run == 1
+    assert counts.timer1_run > 0
 
 
 @pytest.mark.asyncio
@@ -370,7 +362,7 @@ async def test_crash_raises_if_not_run() -> None:
 
 @pytest.mark.asyncio
 async def test_crash_stops_all_running_tasks() -> None:
-    service = ServiceStub.from_awaitable(asyncio.sleep(10))
+    service = ServiceStub.from_awaitable(_long_running_task)
 
     time0 = monotonic()
     async with service:
@@ -383,7 +375,7 @@ async def test_crash_stops_all_running_tasks() -> None:
 @pytest.mark.asyncio
 async def test_crash_propagetes_to_children() -> None:
     service = ServiceStub()
-    dependency = ServiceStub.from_awaitable(asyncio.sleep(10))
+    dependency = ServiceStub.from_awaitable(_long_running_task)
     service.add_dependency(dependency)
 
     time0 = monotonic()
@@ -427,7 +419,7 @@ async def test_stop_on_already_stopped_service() -> None:
 
 @pytest.mark.asyncio
 async def test_stop_on_long_running_service_cancels_tasks() -> None:
-    long_runing_service = Service.from_awaitable(asyncio.sleep(10))
+    long_runing_service = Service.from_awaitable(_long_running_task)
 
     time0 = monotonic()
     async with long_runing_service:
@@ -455,16 +447,17 @@ async def test_restart_raises_if_service_is_not_run() -> None:
 @pytest.mark.asyncio
 async def test_restart_stops_and_restarts_tasks() -> None:
     service = ServiceStub()
+    counts = _add_tasks_to_service(service)
 
     async with service:
         await asyncio.sleep(0.01)
-        assert service.task1_run == 1
+        assert counts.task1_run == 1
 
         await service.restart()
 
         assert service.callback_counts.restart == 1
         await asyncio.sleep(0.01)
-        assert service.task1_run == 2
+        assert counts.task1_run == 2
         assert service.get_state() is ServiceState.RUNNING
 
     assert service.get_state() is ServiceState.SHUTDOWN
@@ -500,7 +493,7 @@ async def test_wait_until_stopped_for_stopped_service() -> None:
 
 @pytest.mark.asyncio
 async def test_wait_until_stopped_for_running_service() -> None:
-    async def _stop_later():
+    async def _stop_later() -> None:
         await asyncio.sleep(0.05)
         await service.stop()
 
@@ -534,3 +527,46 @@ async def test_service_as_context_manager() -> None:
     assert service.callback_counts.start == 1
     assert service.callback_counts.stop == 1
     assert service.callback_counts.start == 1
+
+
+@pytest.mark.asyncio
+async def test_add_task_raises_if_service_is_running() -> None:
+    service = ServiceStub()
+
+    async with service:
+        with pytest.raises(ServiceAlreadyRunError):
+            service.add_task(_long_running_task)
+
+
+@pytest.mark.asyncio
+async def test_add_timer_task_raises_if_service_is_running() -> None:
+    service = ServiceStub()
+
+    async with service:
+        with pytest.raises(ServiceAlreadyRunError):
+            service.add_timer_task(_long_running_task, 1.0)
+
+
+@dataclass(slots=True)
+class TaskCounts:
+    task1_run: int
+    timer1_run: int
+
+
+def _add_tasks_to_service(service: Service) -> TaskCounts:
+    counts = TaskCounts(task1_run=0, timer1_run=0)
+
+    async def task1() -> None:
+        await asyncio.sleep(0)
+        counts.task1_run += 1
+
+    async def timer1() -> None:
+        counts.timer1_run += 1
+
+    service.add_task(task1)
+    service.add_timer_task(timer1, 0.01)
+    return counts
+
+
+async def _long_running_task() -> None:
+    await asyncio.sleep(10)

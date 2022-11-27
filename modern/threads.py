@@ -59,10 +59,11 @@ class ServiceThread(Service):
             )
             await self._events.child_tasks_stopped.wait()
 
-    async def _stop_tasks_from_child_thread(self):
+    async def _stop_tasks_from_child_thread(self) -> None:
         # this method is supposed to run in child thread
         await super()._stop_running_tasks()
-        self._events.child_tasks_stopped.set()
-        self._parent_loop.call_soon_threadsafe(
-            self._events.parent_tasks_stopped.set
-        )
+        if self._parent_loop is not None and self._events is not None:
+            self._events.child_tasks_stopped.set()
+            self._parent_loop.call_soon_threadsafe(
+                self._events.parent_tasks_stopped.set
+            )
