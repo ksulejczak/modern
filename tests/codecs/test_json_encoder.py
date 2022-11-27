@@ -1,7 +1,8 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Set, Tuple, Union
 from uuid import UUID
 
 import pytest
@@ -245,6 +246,29 @@ def test_raises_on_unexpected_sequence_length() -> None:
 
 
 @dataclass(slots=True, frozen=True)
+class SetData:
+    ints: set[int]
+    strs: frozenset[str]
+
+
+def test_coverts_to_sets() -> None:
+    codec = make_json_encoder(SetData)
+
+    out_value = codec(
+        SetData(
+            ints={1, 5, 10},
+            strs=frozenset({"a-value", "b-value"}),
+        )
+    )
+
+    assert isinstance(out_value, Mapping)
+    assert isinstance(out_value["ints"], list)
+    assert set(out_value["ints"]) == {1, 5, 10}
+    assert isinstance(out_value["strs"], list)
+    assert set(out_value["strs"]) == {"a-value", "b-value"}
+
+
+@dataclass(slots=True, frozen=True)
 class Data:
     bvalue: bool
     ivalue: int
@@ -389,6 +413,8 @@ class DeprecatedFields:
     a_tuple: Tuple[int, ...]
     a_dict: Dict[str, int]
     a_union: Union[int, str]
+    a_set: Set[int]
+    a_frozenset: FrozenSet[int]
 
 
 def test_supports_deprecated_typing_classes() -> None:
@@ -400,15 +426,20 @@ def test_supports_deprecated_typing_classes() -> None:
             a_tuple=(3, 4),
             a_dict={"a": 7},
             a_union="123a",
+            a_set={1, 2, 3},
+            a_frozenset=frozenset({1, 2, 3}),
         )
     )
 
-    assert out_value == {
-        "a_list": [1, 2],
-        "a_tuple": [3, 4],
-        "a_dict": {"a": 7},
-        "a_union": "123a",
-    }
+    assert isinstance(out_value, Mapping)
+    assert out_value["a_list"] == [1, 2]
+    assert out_value["a_tuple"] == [3, 4]
+    assert out_value["a_dict"] == {"a": 7}
+    assert out_value["a_union"] == "123a"
+    assert isinstance(out_value["a_set"], list)
+    assert set(out_value["a_set"]) == {1, 2, 3}
+    assert isinstance(out_value["a_frozenset"], list)
+    assert set(out_value["a_frozenset"]) == {1, 2, 3}
 
 
 def test_raises_on_invalid_key_type() -> None:

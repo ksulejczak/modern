@@ -165,8 +165,8 @@ def make_json_decoder(dclass):
 
     if isinstance(dclass, GenericAliases):
         origin = dclass.__origin__
-        if origin is list:
-            return _make_list_decoder(dclass)
+        if origin is list or origin is set or origin is frozenset:
+            return _make_sequence_decoder(dclass)
         if origin is tuple:
             return _make_tuple_decoder(dclass)
         if origin is dict:
@@ -219,12 +219,12 @@ def make_json_encoder(dclass: type[JET]) -> Codec[JET, JsonValue]:
     if isinstance(dclass, GenericAliases):
         origin = dclass.__origin__  # type: ignore[attr-defined]
         if isclass(origin):
-            if issubclass(origin, tuple):
-                return _make_tuple_encoder(dclass)
-            if issubclass(origin, Sequence):
-                return _make_list_encoder(dclass)
             if issubclass(origin, Mapping):
                 return _make_mapping_encoder(dclass)
+            if issubclass(origin, tuple):
+                return _make_tuple_encoder(dclass)
+            if issubclass(origin, Iterable):
+                return _make_list_encoder(dclass)
 
     if isinstance(dclass, UnionTypes):
         return _make_union_encoder(dclass)
@@ -246,12 +246,12 @@ class _ContainerCodec(Codec[JsonValue, CCT]):
         self._container_factory = container_factory
 
     def __call__(self, data: JsonValue) -> CCT:
-        if type(data) is not list:
+        if not isinstance(data, Iterable):
             raise CodecError(data)
         return self._container_factory(map(self._plain_codec, data))
 
 
-def _make_list_decoder(dclass: GenericAlias) -> Codec[JsonValue, Any]:
+def _make_sequence_decoder(dclass: GenericAlias) -> Codec[JsonValue, Any]:
     args = dclass.__args__
     if len(args) != 1:
         raise TypeError("Cannot handle type", dclass)
@@ -270,7 +270,7 @@ class _TupleCodec(Codec[JsonValue, TTP]):
         self._item_codecs = item_codecs
 
     def __call__(self, data: JsonValue) -> TTP:
-        if not isinstance(data, list):
+        if not isinstance(data, Sequence):
             raise CodecError(data)
         if len(data) != len(self._item_codecs):
             raise CodecError(data)
@@ -398,7 +398,7 @@ class _ContainerEncoder(Codec):
         self._item_encoder = item_encoder
 
     def __call__(self, data) -> list:
-        if not isinstance(data, Sequence):
+        if not isinstance(data, Iterable):
             raise CodecError(data)
         return list(map(self._item_encoder, data))
 

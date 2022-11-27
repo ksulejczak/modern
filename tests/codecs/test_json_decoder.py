@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Set, Tuple, Union
 from uuid import UUID
 
 import pytest
@@ -133,6 +133,25 @@ def test_converts_list_of_single_values(
     assert out_value == expected
 
 
+@pytest.mark.parametrize(
+    ["type_", "value", "expected"],
+    [
+        (set[int], [121, "122", 123.0], set([121, 122, 123])),
+        (frozenset[int], [121, "122", 123.0], frozenset([121, 122, 123])),
+    ],
+)
+def test_converts_sets(
+    type_: type,
+    value: list[Any],
+    expected: Any,
+) -> None:
+    codec: Codec[JsonValue, Any] = make_json_decoder(type_)
+
+    out_value = codec(value)
+
+    assert out_value == expected
+
+
 def test_list_raises_on_unannotated_list() -> None:
     with pytest.raises(TypeError):
         make_json_decoder(list)  # type: ignore
@@ -226,7 +245,7 @@ def test_tuple_raises_on_unannotated_tuple() -> None:
 def test_converts_tuple_of_multiple_types() -> None:
     codec = make_json_decoder(TupleData)
 
-    out_value = codec({"values": [123.0, 123.12, "123.12", [1, "2", 3.0]]})
+    out_value = codec({"values": (123.0, 123.12, "123.12", (1, "2", 3.0))})
 
     assert out_value == TupleData(
         values=(123, "123.12", 123.12, ("1", "2", "3.0"))
@@ -380,6 +399,8 @@ class DeprecatedFields:
     a_tuple: Tuple[int, ...]
     a_dict: Dict[str, int]
     a_union: Union[int, str]
+    a_set: Set[int]
+    a_frozenset: FrozenSet[int]
 
 
 def test_supports_deprecated_typing_classes() -> None:
@@ -391,6 +412,8 @@ def test_supports_deprecated_typing_classes() -> None:
             "a_tuple": [3.0, "4"],
             "a_dict": {"a": "7"},
             "a_union": "123a",
+            "a_set": ["1", 2, 3.0],
+            "a_frozenset": ["1", 2, 3.0],
         }
     )
 
@@ -399,6 +422,8 @@ def test_supports_deprecated_typing_classes() -> None:
         a_tuple=(3, 4),
         a_dict={"a": 7},
         a_union="123a",
+        a_set={1, 2, 3},
+        a_frozenset=frozenset({1, 2, 3}),
     )
 
 
