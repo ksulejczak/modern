@@ -22,9 +22,10 @@ __all__ = [
     "TimestampCodec",
     "UuidToStrCodec",
     "instances",
+    "json",
 ]
 
-from . import instances
+from . import instances, json
 from .base import Codec, CodecError
 from .codec_bool_int import BoolToIntCodec
 from .codec_bool_str import BoolToStrCodec

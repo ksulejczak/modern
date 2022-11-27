@@ -7,7 +7,7 @@ from uuid import UUID
 import pytest
 
 from modern.codecs import Codec, CodecError
-from modern.codecs.json_converter import JsonValue, make_json_decoder
+from modern.codecs.json import JsonValue, make_json_decoder
 
 
 def test_raises_on_unknown_type() -> None:
