@@ -22,4 +22,5 @@ repos:
     - id: mypy
       args: [--install-types, --non-interactive, --disallow-untyped-defs, --disallow-incomplete-defs, --disallow-untyped-calls]
       additional_dependencies:
+        - orjson
         - pytest
