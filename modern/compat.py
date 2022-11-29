@@ -1,4 +1,5 @@
 __all__ = [
+    "AnnotatedType",
     "EnumType",
     "GenericAliases",
     "UnionTypes",
@@ -21,3 +22,8 @@ del _U
 _L = typing.List[int]
 GenericAliases = types.GenericAlias, type(_L)
 del _L
+
+
+_A = typing.Annotated[int, lambda x: x]
+AnnotatedType = type(_A)
+del _A
