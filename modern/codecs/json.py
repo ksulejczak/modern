@@ -5,7 +5,6 @@ __all__ = [
     "make_json_serializer",
 ]
 
-import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import datetime
@@ -18,9 +17,9 @@ from uuid import UUID
 from ..compat import EnumType, GenericAliases, UnionTypes
 from . import instances
 from .base import Codec, CodecError, CombinedCodec, NoopCodec
+from .json_helpers import std_dump, std_load
+from .types import JsonPlainValue, JsonValue
 
-JsonPlainValue = int | float | str | None
-JsonValue = int | float | str | bool | None | list | dict[str, Any]
 T = TypeVar("T")
 CT = TypeVar("CT")
 
@@ -187,16 +186,23 @@ def make_json_decoder(dclass: Any) -> Codec[JsonValue, Any]:
 
 
 class _BytesToJson(Codec[bytes, JsonValue]):
+    def __init__(self, json_load: Callable[[bytes], JsonValue]) -> None:
+        self._json_load = json_load
+
     def __call__(self, data: bytes) -> JsonValue:
-        return json.loads(data)
+        try:
+            return self._json_load(data)
+        except (ValueError, TypeError) as e:
+            raise CodecError(data) from e
 
 
-_BYTES_TO_JSON = _BytesToJson()
-
-
-def make_json_deserializer(dclass: type[JDT]) -> Codec[bytes, JDT]:
+def make_json_deserializer(
+    dclass: type[JDT],
+    json_load: Callable[[bytes], JsonValue] = std_load,
+) -> Codec[bytes, JDT]:
     codec = make_json_decoder(dclass)
-    return CombinedCodec(_BYTES_TO_JSON, codec)
+    bytes_to_json_codec = _BytesToJson(json_load)
+    return CombinedCodec(bytes_to_json_codec, codec)
 
 
 class _NoopCodecWithTypecheck(Codec):
@@ -255,16 +261,20 @@ def make_json_encoder(dclass: type[JET]) -> Codec[JET, JsonValue]:
 
 
 class _JsonToBytes(Codec[JsonValue, bytes]):
+    def __init__(self, json_dump: Callable[[JsonValue], bytes]) -> None:
+        self._json_dump = json_dump
+
     def __call__(self, data: JsonValue) -> bytes:
-        return json.dumps(data).encode()
+        return self._json_dump(data)
 
 
-_JSON_TO_BYTES = _JsonToBytes()
-
-
-def make_json_serializer(dclass: type[JDT]) -> Codec[JDT, bytes]:
+def make_json_serializer(
+    dclass: type[JDT],
+    json_dump: Callable[[JsonValue], bytes] = std_dump,
+) -> Codec[JDT, bytes]:
     codec = make_json_encoder(dclass)
-    return CombinedCodec(codec, _JSON_TO_BYTES)
+    json_to_bytes_codec = _JsonToBytes(json_dump)
+    return CombinedCodec(codec, json_to_bytes_codec)
 
 
 CCT = TypeVar("CCT")

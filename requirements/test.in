@@ -1,3 +1,6 @@
+orjson
 pytest
 pytest-asyncio
 pytest-cov
+simplejson
+ujson
