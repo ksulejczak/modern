@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __all__ = [
     "make_json_decoder",
     "make_json_deserializer",
@@ -14,11 +16,12 @@ from types import UnionType
 from typing import Any, Generic, TypeVar, get_args, get_origin, overload
 from uuid import UUID
 
-from ..compat import EnumType, GenericAliases, UnionTypes
+from ..compat import AnnotatedType, EnumType, GenericAliases, UnionTypes
 from . import instances
 from .base import Codec, CodecError, CombinedCodec, NoopCodec
 from .json_helpers import std_dump, std_load
 from .types import JsonPlainValue, JsonValue
+from .validators import Validator
 
 T = TypeVar("T")
 CT = TypeVar("CT")
@@ -178,6 +181,8 @@ def make_json_decoder(dclass: Any) -> Codec[JsonValue, Any]:
             return _make_tuple_decoder(dclass)
         if origin is dict:
             return _make_mapping_decoder(dclass)
+    if isinstance(dclass, AnnotatedType):
+        return _make_annotated_decoder(dclass)
     if isinstance(dclass, UnionTypes):
         return _make_union_decoder(dclass)
     if issubclass(dclass, Enum):
@@ -253,6 +258,8 @@ def make_json_encoder(dclass: type[JET]) -> Codec[JET, JsonValue]:
             if issubclass(origin, Iterable):
                 return _make_list_encoder(dclass)
 
+    if isinstance(dclass, AnnotatedType):
+        return _make_annotated_encoder(dclass)
     if isinstance(dclass, UnionTypes):
         return _make_union_encoder(dclass)
     if issubclass(dclass, Enum):
@@ -404,6 +411,33 @@ class _EnumCodec(Codec):
 
 def _make_enum_decoder(dclass: EnumType) -> Codec:
     return _EnumCodec(dclass)
+
+
+class _CodecWithValidators(Codec):
+    def __init__(
+        self, codec: Codec, validators: tuple[Validator, ...]
+    ) -> None:
+        self._codec = codec
+        self._validators = validators
+
+    def __call__(self, data: Any) -> Any:
+        value = self._codec(data)
+        for validator in self._validators:
+            if validator(value) is False:
+                raise CodecError("Validation failed", value, validator)
+        return value
+
+
+def _make_annotated_decoder(dclass: Any) -> Codec:
+    args = get_args(dclass)
+    codec = make_json_decoder(args[0])
+    validators = tuple(
+        validator for validator in args[1:] if isinstance(validator, Validator)
+    )
+    if not validators:
+        return codec
+    else:
+        return _CodecWithValidators(codec, validators)
 
 
 OT = TypeVar("OT")
@@ -563,3 +597,8 @@ def _make_dataclass_encoder(dclass: Any) -> Codec:
         codec_by_name[field.name] = make_json_encoder(field.type)
 
     return _ObjectEncoder(dclass, codec_by_name)
+
+
+def _make_annotated_encoder(dclass: Any) -> Codec:
+    args = get_args(dclass)
+    return make_json_encoder(args[0])
