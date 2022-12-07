@@ -1,1 +1,4 @@
+dist/
+requirements/*.txt
 .coverage
+*.egg-info
