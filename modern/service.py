@@ -11,11 +11,12 @@ from contextlib import (
 )
 from functools import wraps
 from types import TracebackType
-from typing import Any
+from typing import Any, Final
 
 from .types import ServiceState, ServiceT
 
 log = logging.getLogger(__name__)
+DEFAULT_CHILDREN_WATCH_INTERVAL: Final[float] = 1.0
 
 
 class ServiceError(Exception):
@@ -52,12 +53,19 @@ class ServiceWithCallbacks(ServiceT):
 
 class Service(ServiceWithCallbacks):
     @classmethod
-    def from_awaitable(cls: type[Service], coro: _Task) -> Service:
-        service = cls()
+    def from_awaitable(
+        cls: type[Service],
+        coro: _Task,
+        children_watch_interval: float = DEFAULT_CHILDREN_WATCH_INTERVAL,
+    ) -> Service:
+        service = cls(children_watch_interval=children_watch_interval)
         service.add_task(coro)
         return service
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        children_watch_interval: float = DEFAULT_CHILDREN_WATCH_INTERVAL,
+    ) -> None:
         self._state = ServiceState.INIT
         self._start_count = 0
         self._should_stop = False
@@ -70,6 +78,7 @@ class Service(ServiceWithCallbacks):
         self._exit_stack: ExitStack | None = None
         self._context_managers: list[AbstractContextManager] = []
         self._crash_reason: BaseException | None = None
+        self._children_watch_interval = children_watch_interval
 
     def get_state(self) -> ServiceState:
         return self._state
@@ -151,7 +160,8 @@ class Service(ServiceWithCallbacks):
         await self._stop_running_tasks()
         self._stopped.set()
         for child in self._children:
-            await child.crash(reason)
+            if child.get_state() in _STATES_ACTIVE:
+                await child.crash(reason)
         self._crash_reason = reason
         self._state = ServiceState.CRASHED
 
@@ -199,14 +209,7 @@ class Service(ServiceWithCallbacks):
         self._tasks_to_start.append(func)
 
     def add_timer_task(self, func: _Task, interval: float) -> None:
-        @wraps(func)
-        async def _timer() -> None:
-            while self._should_stop is False:
-                await asyncio.sleep(interval)
-                if not self._should_stop:
-                    await func()
-
-        self.add_task(_timer)
+        self.add_task(self._make_timer_task(func, interval))
 
     async def _create_my_tasks(self) -> None:
         def make_guarded_task(func: _Task) -> _Task:
@@ -235,6 +238,41 @@ class Service(ServiceWithCallbacks):
         for task in self._tasks_to_start:
             async_task = asyncio.create_task(make_guarded_task(task)())
             self._tasks.append(async_task)
+
+        if self._children:
+            self._tasks.append(
+                asyncio.create_task(
+                    self._make_timer_task(
+                        self._watch_children,
+                        interval=self._children_watch_interval,
+                    )()
+                )
+            )
+
+    async def _watch_children(self) -> None:
+        my_state = self.get_state()
+        if my_state is not ServiceState.RUNNING:  # pragma: no cover
+            return
+        for child in self._children:
+            if child.get_state() is ServiceState.CRASHED:
+                # we cannot just call self.crash() here as this will cancel
+                # this very method and crash() as itself
+                asyncio.get_running_loop().create_task(
+                    self.crash(
+                        child.get_crash_reason()
+                        or RuntimeError("Crash from child")
+                    )
+                )
+
+    def _make_timer_task(self, func: _Task, interval: float) -> _Task:
+        @wraps(func)
+        async def _timer() -> None:
+            while self._should_stop is False:
+                await asyncio.sleep(interval)
+                if not self._should_stop:
+                    await func()
+
+        return _timer
 
     def _reset(self) -> None:
         self._should_stop = False

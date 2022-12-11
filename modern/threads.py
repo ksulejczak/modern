@@ -2,7 +2,11 @@ import asyncio
 from dataclasses import dataclass
 from threading import Thread
 
-from .service import Service, ServiceNotRunError
+from .service import (
+    DEFAULT_CHILDREN_WATCH_INTERVAL,
+    Service,
+    ServiceNotRunError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,8 +18,11 @@ class ThreadData:
 
 
 class ServiceThread(Service):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        children_watch_interval: float = DEFAULT_CHILDREN_WATCH_INTERVAL,
+    ) -> None:
+        super().__init__(children_watch_interval=children_watch_interval)
         self._thread_data: ThreadData | None = None
         self._thread_loop: asyncio.AbstractEventLoop | None = None
 

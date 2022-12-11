@@ -73,3 +73,7 @@ class ServiceT(abc.ABC):
     @abc.abstractmethod
     def set_shutdown(self) -> None:
         ...  # pragma: no cover
+
+    @abc.abstractmethod
+    def get_crash_reason(self) -> BaseException | None:
+        ...  # pragma: no cover
