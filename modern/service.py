@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable, Coroutine
 from contextlib import (
     AbstractAsyncContextManager,
@@ -8,10 +9,13 @@ from contextlib import (
     AsyncExitStack,
     ExitStack,
 )
+from functools import wraps
 from types import TracebackType
 from typing import Any
 
 from .types import ServiceState, ServiceT
+
+log = logging.getLogger(__name__)
 
 
 class ServiceError(Exception):
@@ -69,6 +73,9 @@ class Service(ServiceWithCallbacks):
 
     def get_state(self) -> ServiceState:
         return self._state
+
+    def get_crash_reason(self) -> BaseException | None:
+        return self._crash_reason
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
         self._children.append(service)
@@ -188,9 +195,11 @@ class Service(ServiceWithCallbacks):
     def add_task(self, func: _Task) -> None:
         if self._state is not ServiceState.INIT:
             raise ServiceAlreadyRunError(self._state)
+
         self._tasks_to_start.append(func)
 
     def add_timer_task(self, func: _Task, interval: float) -> None:
+        @wraps(func)
         async def _timer() -> None:
             while self._should_stop is False:
                 await asyncio.sleep(interval)
@@ -200,8 +209,31 @@ class Service(ServiceWithCallbacks):
         self.add_task(_timer)
 
     async def _create_my_tasks(self) -> None:
+        def make_guarded_task(func: _Task) -> _Task:
+            async def _task() -> None:
+                for fail in range(10):
+                    try:
+                        await func()
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        log.exception(
+                            "Task %s failed %s/10.", func.__name__, fail + 1
+                        )
+                        reason = e
+                    else:
+                        break
+                else:
+                    log.error(
+                        "Task %s failed too many times. Stopping service.",
+                        func.__name__,
+                    )
+                    asyncio.create_task(self.crash(reason))
+
+            return _task
+
         for task in self._tasks_to_start:
-            async_task = asyncio.create_task(task())
+            async_task = asyncio.create_task(make_guarded_task(task)())
             self._tasks.append(async_task)
 
     def _reset(self) -> None:
