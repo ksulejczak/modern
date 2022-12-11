@@ -422,7 +422,7 @@ async def test_stop_on_already_stopped_service() -> None:
 
 @pytest.mark.asyncio
 async def test_stop_on_long_running_service_cancels_tasks() -> None:
-    long_runing_service = Service.from_awaitable(_long_running_task)
+    long_runing_service = ServiceStub.from_awaitable(_long_running_task)
 
     time0 = monotonic()
     async with long_runing_service:
@@ -430,6 +430,17 @@ async def test_stop_on_long_running_service_cancels_tasks() -> None:
     time1 = monotonic()
 
     assert time1 - time0 < 1
+
+
+@pytest.mark.asyncio
+async def test_stop_from_thread() -> None:
+    async def _stop() -> None:
+        await thread_service.stop()
+
+    thread_service = ServiceStub.from_awaitable(_stop)
+
+    async with thread_service:
+        await asyncio.sleep(0.01)
 
 
 def test_service_reset() -> None:
@@ -478,6 +489,25 @@ async def test_restart_on_crashed_service() -> None:
     await service.restart()
     assert service.get_state() is ServiceState.RUNNING
     await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_task_is_run_10_times_and_crashes_service() -> None:
+    counts = TaskCounts(task1_run=0, timer1_run=0)
+
+    async def _fail() -> None:
+        counts.task1_run += 1
+        raise ValueError()
+
+    service = ServiceStub()
+    service.add_task(_fail)
+
+    async with service:
+        await asyncio.sleep(0.01)
+
+        assert service.get_state() is ServiceState.CRASHED
+        assert isinstance(service.get_crash_reason(), ValueError)
+        assert counts.task1_run == 10
 
 
 @pytest.mark.asyncio

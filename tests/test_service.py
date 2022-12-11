@@ -476,6 +476,25 @@ async def test_restart_on_crashed_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_task_is_run_10_times_and_crashes_service() -> None:
+    counts = TaskCounts(task1_run=0, timer1_run=0)
+
+    async def _fail() -> None:
+        counts.task1_run += 1
+        raise ValueError()
+
+    service = ServiceStub()
+    service.add_task(_fail)
+
+    async with service:
+        await asyncio.sleep(0.01)
+
+        assert service.get_state() is ServiceState.CRASHED
+        assert isinstance(service.get_crash_reason(), ValueError)
+        assert counts.task1_run == 10
+
+
+@pytest.mark.asyncio
 async def test_wait_until_stopped_raises_for_not_started_service() -> None:
     service = ServiceStub()
 
