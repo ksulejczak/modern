@@ -4,6 +4,7 @@ __all__ = [
     "ServiceError",
     "ServiceNotRunError",
     "ServiceState",
+    "ServiceT",
     "__version__",
 ]
 
@@ -13,5 +14,5 @@ from .service import (
     ServiceError,
     ServiceNotRunError,
 )
-from .types import ServiceState
+from .types import ServiceState, ServiceT
 from .version import __version__
