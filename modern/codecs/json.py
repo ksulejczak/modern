@@ -460,7 +460,10 @@ class _ObjectCodec(Codec[JsonValue, OT]):
             plain_codec = self._field_mapping.get(k)
             if plain_codec is not None:
                 kw[k] = plain_codec(v)
-        return self._factory(**kw)
+        try:
+            return self._factory(**kw)
+        except TypeError as e:
+            raise CodecError(data) from e
 
 
 DCT = TypeVar("DCT")
