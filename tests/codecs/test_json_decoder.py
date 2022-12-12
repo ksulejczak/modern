@@ -294,6 +294,20 @@ def test_parses_and_converts_json_plain_data() -> None:
     )
 
 
+def test_raises_if_required_key_is_missing() -> None:
+    codec = make_json_decoder(Data)
+
+    with pytest.raises(CodecError):
+        codec(
+            {
+                "bvalue": "true",
+                "ivalue": "123",
+                "fvalue": "123.456",
+                # `svalue` is missing
+            }
+        )
+
+
 @pytest.mark.parametrize("value", ["", "abc", 123, None, [], set()])
 def test_raises_on_invalid_value(value: Any) -> None:
     codec = make_json_decoder(Data)
