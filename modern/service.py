@@ -65,6 +65,8 @@ class Service(ServiceWithCallbacks):
     def __init__(
         self,
         children_watch_interval: float = DEFAULT_CHILDREN_WATCH_INTERVAL,
+        level: int = 0,
+        name: str | None = None,
     ) -> None:
         self._state = ServiceState.INIT
         self._start_count = 0
@@ -79,14 +81,29 @@ class Service(ServiceWithCallbacks):
         self._context_managers: list[AbstractContextManager] = []
         self._crash_reason: BaseException | None = None
         self._children_watch_interval = children_watch_interval
+        self._name = name or self.__class__.__name__
+        self.set_level(level)
 
     def get_state(self) -> ServiceState:
         return self._state
+
+    def get_name(self) -> str:
+        return self._name
+
+    def get_level(self) -> int:
+        return self._level
+
+    def set_level(self, level: int) -> None:
+        self._level = level
+        self._log_lead = f'{"--" * level}> {self._name}:'
+        for child in self._children:
+            child.set_level(level + 1)
 
     def get_crash_reason(self) -> BaseException | None:
         return self._crash_reason
 
     def add_dependency(self, service: ServiceT) -> ServiceT:
+        service.set_level(self._level + 1)
         self._children.append(service)
         return service
 
@@ -111,6 +128,7 @@ class Service(ServiceWithCallbacks):
         self._async_context_managers.append(context)
 
     async def start(self) -> None:
+        self._log_debug("Starting service")
         if self._state not in _STATES_INACTIVE:
             raise ServiceAlreadyRunError(self._state)
         self._state = ServiceState.STARTING
@@ -154,6 +172,7 @@ class Service(ServiceWithCallbacks):
             return False
 
     async def crash(self, reason: BaseException) -> None:
+        self._log_info("Crashing service with reason %s", reason)
         if self._state not in _STATES_ACTIVE:
             raise ServiceNotRunError(self._state)
         self._should_stop = True
@@ -168,6 +187,7 @@ class Service(ServiceWithCallbacks):
     async def stop(self) -> None:
         if self._stopped.is_set():
             return
+        self._log_debug("Stopping service")
         await self._do_shutdown()
 
     def service_reset(self) -> None:
@@ -176,6 +196,7 @@ class Service(ServiceWithCallbacks):
     async def restart(self) -> None:
         if self._state not in _STATES_RESTARTABLE:
             raise ServiceNotRunError(self._state)
+        self._log_debug("Restarting service")
         await self._do_shutdown()
         await self.on_restart()
         await self.start()
@@ -220,14 +241,14 @@ class Service(ServiceWithCallbacks):
                     except asyncio.CancelledError:
                         break
                     except Exception as e:
-                        log.exception(
+                        self._log_exception(
                             "Task %s failed %s/10.", func.__name__, fail + 1
                         )
                         reason = e
                     else:
                         break
                 else:
-                    log.error(
+                    self._log_error(
                         "Task %s failed too many times. Stopping service.",
                         func.__name__,
                     )
@@ -257,6 +278,10 @@ class Service(ServiceWithCallbacks):
             if child.get_state() is ServiceState.CRASHED:
                 # we cannot just call self.crash() here as this will cancel
                 # this very method and crash() as itself
+                self._log_warning(
+                    "Child %s crashed! We will crash as well!",
+                    child.get_name(),
+                )
                 asyncio.get_running_loop().create_task(
                     self.crash(
                         child.get_crash_reason()
@@ -321,6 +346,21 @@ class Service(ServiceWithCallbacks):
         self._state = ServiceState.SHUTDOWN
         await self.on_shutdown()
         self._reset()
+
+    def _log_debug(self, msg: str, *args: Any) -> None:
+        return log.debug(f"{self._log_lead} {msg}", *args)
+
+    def _log_info(self, msg: str, *args: Any) -> None:
+        return log.info(f"{self._log_lead} {msg}", *args)
+
+    def _log_warning(self, msg: str, *args: Any) -> None:
+        return log.warning(f"{self._log_lead} {msg}", *args)
+
+    def _log_error(self, msg: str, *args: Any) -> None:
+        return log.error(f"{self._log_lead} {msg}", *args)
+
+    def _log_exception(self, msg: str, *args: Any) -> None:
+        return log.exception(f"{self._log_lead} {msg}", *args)
 
 
 _Task = Callable[[], Coroutine[Any, Any, None]]

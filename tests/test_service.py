@@ -184,6 +184,27 @@ async def test_get_state() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_set_level() -> None:
+    service = ServiceStub()
+
+    service.set_level(10)
+    level = service.get_level()
+
+    assert level == 10
+
+
+@pytest.mark.asyncio
+async def test_set_level_propagates_to_children() -> None:
+    service = ServiceStub()
+    dependency = ServiceStub()
+    service.add_dependency(dependency)
+
+    service.set_level(10)
+
+    assert dependency.get_level() == 11
+
+
+@pytest.mark.asyncio
 async def test_add_dependency_dependent_service_is_run_on_start() -> None:
     service = ServiceStub()
     dependency = ServiceStub()
