@@ -11,3 +11,31 @@ minversion = "6.0"
 addopts = "--cov=modern --cov-fail-under=100 --cov-report=term-missing"
 testpaths = ["tests"]
 asyncio_mode = "strict"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modern"
+version = "0.0.1"
+authors = [
+  { name="Krzysztof Sulejczak", email="krzysztof.sulejczak@gmail.com" },
+]
+description = "A small library for creating async services"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+]
+
+[project.urls]
+"Homepage" = "https://github.com/ksulejczak/modern"
+"Bug Tracker" = "https://github.com/ksulejczak/modern/issues"
+
+[tool.setuptools.package-data]
+modern = ["py.typed"]

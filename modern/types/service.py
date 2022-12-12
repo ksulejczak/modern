@@ -20,6 +20,18 @@ class ServiceT(abc.ABC):
         ...  # pragma: no cover
 
     @abc.abstractmethod
+    def get_name(self) -> str:
+        ...  # pragma: no cover
+
+    @abc.abstractmethod
+    def get_level(self) -> int:
+        ...  # pragma: no cover
+
+    @abc.abstractmethod
+    def set_level(self, level: int) -> None:
+        ...  # pragma: no cover
+
+    @abc.abstractmethod
     def add_dependency(self, service: ServiceT) -> ServiceT:
         ...  # pragma: no cover
 
@@ -72,4 +84,8 @@ class ServiceT(abc.ABC):
 
     @abc.abstractmethod
     def set_shutdown(self) -> None:
+        ...  # pragma: no cover
+
+    @abc.abstractmethod
+    def get_crash_reason(self) -> BaseException | None:
         ...  # pragma: no cover

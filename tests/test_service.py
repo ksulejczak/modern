@@ -6,8 +6,14 @@ from typing import AsyncGenerator, Generator
 
 import pytest
 
-from modern.service import Service, ServiceAlreadyRunError, ServiceNotRunError
+from modern.service import (
+    DEFAULT_CHILDREN_WATCH_INTERVAL,
+    Service,
+    ServiceAlreadyRunError,
+    ServiceNotRunError,
+)
 from modern.types import ServiceState
+from tests.tools.services import active_wait_for_service_state
 
 
 @dataclass
@@ -21,8 +27,10 @@ class CallbackCounts:
 
 
 class ServiceStub(Service):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(
+        self, children_watch_interval: float = DEFAULT_CHILDREN_WATCH_INTERVAL
+    ) -> None:
+        super().__init__(children_watch_interval=children_watch_interval)
         self.task1_run = 0
         self.timer1_run = 0
         self.callback_counts = CallbackCounts()
@@ -173,6 +181,27 @@ async def test_get_state() -> None:
         assert service.get_state() is ServiceState.RUNNING
 
     assert service.get_state() is ServiceState.SHUTDOWN
+
+
+@pytest.mark.asyncio
+async def test_get_set_level() -> None:
+    service = ServiceStub()
+
+    service.set_level(10)
+    level = service.get_level()
+
+    assert level == 10
+
+
+@pytest.mark.asyncio
+async def test_set_level_propagates_to_children() -> None:
+    service = ServiceStub()
+    dependency = ServiceStub()
+    service.add_dependency(dependency)
+
+    service.set_level(10)
+
+    assert dependency.get_level() == 11
 
 
 @pytest.mark.asyncio
@@ -389,6 +418,23 @@ async def test_crash_propagetes_to_children() -> None:
 
 
 @pytest.mark.asyncio
+async def test_crash_from_child_propagates_to_parent() -> None:
+    service = ServiceStub.from_awaitable(
+        _long_running_task,
+        children_watch_interval=0.1,
+    )
+    dependency = ServiceStub()
+    service.add_dependency(dependency)
+
+    async with service:
+        await dependency.crash(ValueError())
+        await active_wait_for_service_state(service, ServiceState.CRASHED, 1.1)
+
+    assert service.get_state() is ServiceState.CRASHED
+    assert dependency.get_state() is ServiceState.CRASHED
+
+
+@pytest.mark.asyncio
 async def test_stop_on_not_started_service() -> None:
     service = ServiceStub()
 
@@ -473,6 +519,25 @@ async def test_restart_on_crashed_service() -> None:
     await service.restart()
 
     assert service.get_state() is ServiceState.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_task_is_run_10_times_and_crashes_service() -> None:
+    counts = TaskCounts(task1_run=0, timer1_run=0)
+
+    async def _fail() -> None:
+        counts.task1_run += 1
+        raise ValueError()
+
+    service = ServiceStub()
+    service.add_task(_fail)
+
+    async with service:
+        await asyncio.sleep(0.01)
+
+        assert service.get_state() is ServiceState.CRASHED
+        assert isinstance(service.get_crash_reason(), ValueError)
+        assert counts.task1_run == 10
 
 
 @pytest.mark.asyncio
