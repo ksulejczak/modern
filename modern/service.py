@@ -10,6 +10,7 @@ from contextlib import (
     ExitStack,
 )
 from functools import wraps
+from time import monotonic
 from types import TracebackType
 from typing import Any, Final
 
@@ -293,7 +294,16 @@ class Service(ServiceWithCallbacks):
         @wraps(func)
         async def _timer() -> None:
             while self._should_stop is False:
+                should_wake_at = monotonic() + interval
                 await asyncio.sleep(interval)
+                now = monotonic()
+                diff = now - should_wake_at
+                if abs(diff) > 0.1:
+                    self._log_warning(
+                        "Task %s time drift: %ss",
+                        func.__name__,
+                        diff,
+                    )
                 if not self._should_stop:
                     await func()
 

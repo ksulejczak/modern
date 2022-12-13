@@ -1,8 +1,9 @@
 import asyncio
+import logging
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from time import monotonic
-from typing import AsyncGenerator, Generator
+from time import monotonic, sleep
 
 import pytest
 
@@ -11,6 +12,7 @@ from modern.service import (
     Service,
     ServiceAlreadyRunError,
     ServiceNotRunError,
+    log,
 )
 from modern.types import ServiceState
 from tests.tools.services import active_wait_for_service_state
@@ -612,6 +614,20 @@ async def test_add_timer_task_raises_if_service_is_running() -> None:
             service.add_timer_task(_long_running_task, 1.0)
 
 
+@pytest.mark.asyncio
+async def test_timer_task_warns_about_time_drift() -> None:
+    service = ServiceStub()
+    _add_tasks_to_service(service)
+
+    with _monitor_log(log) as logs:
+        async with service:
+            await asyncio.sleep(0)  # let the timer kick in
+            sleep(0.15)  # this will block thread event loop
+            await asyncio.sleep(0)  # let the handler log message
+
+    assert any("time drift:" in log.message for log in logs)
+
+
 @dataclass(slots=True)
 class TaskCounts:
     task1_run: int
@@ -635,3 +651,19 @@ def _add_tasks_to_service(service: Service) -> TaskCounts:
 
 async def _long_running_task() -> None:
     await asyncio.sleep(10)
+
+
+@contextmanager
+def _monitor_log(
+    logger: logging.Logger,
+) -> Generator[list[logging.LogRecord], None, None]:
+    def monitor_filter(record: logging.LogRecord) -> int:
+        records.append(record)
+        return 1
+
+    records: list[logging.LogRecord] = []
+    logger.addFilter(monitor_filter)
+    try:
+        yield records
+    finally:
+        logger.removeFilter(monitor_filter)
