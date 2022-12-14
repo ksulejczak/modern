@@ -283,12 +283,12 @@ class Service(ServiceWithCallbacks):
                     "Child %s crashed! We will crash as well!",
                     child.get_name(),
                 )
-                asyncio.get_running_loop().create_task(
-                    self.crash(
-                        child.get_crash_reason()
-                        or RuntimeError("Crash from child")
-                    )
-                )
+                self._schedule_crash(child.get_crash_reason())
+
+    def _schedule_crash(self, reason: BaseException | None) -> None:
+        asyncio.get_running_loop().create_task(
+            self.crash(reason or RuntimeError("Crash from child"))
+        )
 
     def _make_timer_task(self, func: _Task, interval: float) -> _Task:
         @wraps(func)
