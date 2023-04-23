@@ -179,6 +179,7 @@ class Service(ServiceWithCallbacks):
         self._should_stop = True
         await self._stop_running_tasks()
         self._stopped.set()
+        self._log_info("crashing children")
         for child in self._children:
             if child.get_state() in _STATES_ACTIVE:
                 await child.crash(reason)
@@ -234,42 +235,42 @@ class Service(ServiceWithCallbacks):
         self.add_task(self._make_timer_task(func, interval))
 
     async def _create_my_tasks(self) -> None:
-        def make_guarded_task(func: _Task) -> _Task:
-            async def _task() -> None:
-                for fail in range(10):
-                    try:
-                        await func()
-                    except asyncio.CancelledError:
-                        break
-                    except Exception as e:
-                        self._log_exception(
-                            "Task %s failed %s/10.", func.__name__, fail + 1
-                        )
-                        reason = e
-                    else:
-                        break
-                else:
-                    self._log_error(
-                        "Task %s failed too many times. Stopping service.",
-                        func.__name__,
-                    )
-                    asyncio.create_task(self.crash(reason))
-
-            return _task
-
         for task in self._tasks_to_start:
-            async_task = asyncio.create_task(make_guarded_task(task)())
+            async_task = asyncio.create_task(self._make_guarded_task(task)())
             self._tasks.append(async_task)
 
-        if self._children:
-            self._tasks.append(
-                asyncio.create_task(
-                    self._make_timer_task(
-                        self._watch_children,
-                        interval=self._children_watch_interval,
-                    )()
-                )
+        self._tasks.append(
+            asyncio.create_task(
+                self._make_timer_task(
+                    self._watch_children,
+                    interval=self._children_watch_interval,
+                )()
             )
+        )
+
+    def _make_guarded_task(self, func: _Task) -> _Task:
+        async def _task() -> None:
+            for fail in range(10):
+                self._log_warning("time: %s", monotonic())
+                try:
+                    await func()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    self._log_exception(
+                        "Task %s failed %s/10.", func.__name__, fail + 1
+                    )
+                    reason = e
+                else:
+                    break
+            else:
+                self._log_error(
+                    "Task %s failed too many times. Stopping service.",
+                    func.__name__,
+                )
+                asyncio.create_task(self.crash(reason))
+
+        return _task
 
     async def _watch_children(self) -> None:
         my_state = self.get_state()
