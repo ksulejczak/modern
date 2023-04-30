@@ -657,9 +657,9 @@ async def _long_running_task() -> None:
 def _monitor_log(
     logger: logging.Logger,
 ) -> Generator[list[logging.LogRecord], None, None]:
-    def monitor_filter(record: logging.LogRecord) -> int:
+    def monitor_filter(record: logging.LogRecord) -> bool:
         records.append(record)
-        return 1
+        return True
 
     records: list[logging.LogRecord] = []
     logger.addFilter(monitor_filter)
