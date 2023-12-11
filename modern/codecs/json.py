@@ -8,12 +8,21 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import Field, dataclass, fields
 from datetime import datetime
 from enum import Enum
 from inspect import isclass
 from types import UnionType
-from typing import Any, Generic, TypeVar, get_args, get_origin, overload
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    Protocol,
+    TypeVar,
+    get_args,
+    get_origin,
+    overload,
+)
 from uuid import UUID
 
 from ..compat import AnnotatedType, EnumType, GenericAliases, UnionTypes
@@ -460,13 +469,19 @@ class _ObjectCodec(Codec[JsonValue, OT]):
             plain_codec = self._field_mapping.get(k)
             if plain_codec is not None:
                 kw[k] = plain_codec(v)
-        return self._factory(**kw)
+        try:
+            return self._factory(**kw)
+        except TypeError as e:
+            raise CodecError(data) from e
 
 
-DCT = TypeVar("DCT")
+class DataclassInstance(Protocol):
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
 
 
-def _make_dataclass_decoder(dclass: type[DCT]) -> Codec[JsonValue, DCT]:
+def _make_dataclass_decoder(
+    dclass: type[DataclassInstance],
+) -> Codec[JsonValue, DataclassInstance]:
     codec_by_name = {}
     for field in fields(dclass):
         codec_by_name[field.name] = make_json_decoder(field.type)

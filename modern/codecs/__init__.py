@@ -4,6 +4,7 @@ __all__ = [
     "BytesToStrCodec",
     "Codec",
     "CodecError",
+    "CombinedCodec",
     "DatetimeToFloatTimestampCodec",
     "DatetimeToStrIsoformatCodec",
     "FloatToDatetimeTimestampCodec",
@@ -26,7 +27,7 @@ __all__ = [
 ]
 
 from . import instances, json
-from .base import Codec, CodecError
+from .base import Codec, CodecError, CombinedCodec
 from .codec_bool_int import BoolToIntCodec
 from .codec_bool_str import BoolToStrCodec
 from .codec_bytes_str import BytesToStrCodec, StrToBytesCodec
